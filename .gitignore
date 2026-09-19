@@ -1,0 +1,21 @@
+# env / secrets
+.env
+.env.*
+!.env.example
+
+# python
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+
+# node / next.js
+node_modules/
+frontend/.next/
+frontend/out/
+
+# docker
+*.log
+
+# os
+.DS_Store

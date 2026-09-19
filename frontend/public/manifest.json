@@ -1,0 +1,9 @@
+{
+  "name": "Твоя Шина",
+  "short_name": "Твоя Шина",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#02167f",
+  "theme_color": "#02167f",
+  "icons": []
+}

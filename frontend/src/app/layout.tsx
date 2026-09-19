@@ -16,6 +16,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Твоя Шина",
   description: "Онлайн-запись в автосервис Твоя Шина",
+  manifest: "/manifest.json",
+};
+
+export const viewport = {
+  themeColor: "#02167f",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

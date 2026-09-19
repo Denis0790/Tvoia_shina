@@ -73,3 +73,18 @@ async def refresh(request: Request, response: Response, db: AsyncSession = Depen
     )
     access_token = create_access_token(str(token_row.user_id))
     return {"access_token": access_token}
+
+
+@router.post("/logout")
+async def logout(request: Request, response: Response, db: AsyncSession = Depends(get_db)):
+    raw_token = request.cookies.get(REFRESH_COOKIE)
+    if raw_token:
+        token_hash = hash_token(raw_token)
+        result = await db.execute(select(RefreshToken).where(RefreshToken.token_hash == token_hash))
+        token_row = result.scalar_one_or_none()
+        if token_row is not None and token_row.revoked_at is None:
+            token_row.revoked_at = datetime.now(timezone.utc)
+            await db.commit()
+
+    response.delete_cookie(REFRESH_COOKIE)
+    return {"ok": True}

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { requestCode, verifyCode } from "@/lib/api";
+import { setAccessToken } from "@/lib/auth";
 
 export default function LoginPage() {
   const [step, setStep] = useState<"phone" | "code">("phone");
@@ -25,7 +26,7 @@ export default function LoginPage() {
     setError("");
     try {
       const data = await verifyCode(phone, code);
-      localStorage.setItem("access_token", data.access_token);
+      setAccessToken(data.access_token);
       window.location.href = "/";
     } catch {
       setError("Неверный код");

@@ -1,26 +1,43 @@
-async function getHealth() {
-  try {
-    const res = await fetch(`${process.env.INTERNAL_API_URL}/health`, { cache: "no-store" });
-    if (!res.ok) throw new Error("bad status");
-    return await res.json();
-  } catch {
-    return null;
-  }
-}
+"use client";
 
-export default async function Home() {
-  const health = await getHealth();
+import { useEffect, useState } from "react";
+import { apiFetch, setAccessToken } from "@/lib/auth";
+
+type Me = { id: string; phone: string | null; full_name: string | null };
+
+export default function Home() {
+  const [me, setMe] = useState<Me | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    apiFetch("/users/me")
+      .then((res) => (res.ok ? res.json() : null))
+      .then(setMe)
+      .finally(() => setLoading(false));
+  }, []);
+
+  function handleLogout() {
+    setAccessToken(null);
+    setMe(null);
+  }
+
   return (
     <main style={{ padding: 40, fontFamily: "sans-serif" }}>
       <h1>Твоя Шина</h1>
-      <p>
-        Статус backend:{" "}
-        {health ? (
-          <b style={{ color: "green" }}>{health.status}</b>
-        ) : (
-          <b style={{ color: "red" }}>недоступен</b>
-        )}
-      </p>
+      {loading && <p>Загрузка…</p>}
+      {!loading && me && (
+        <>
+          <p>
+            Вы вошли как <b>{me.phone}</b>
+          </p>
+          <button onClick={handleLogout}>Выйти</button>
+        </>
+      )}
+      {!loading && !me && (
+        <p>
+          Вы не авторизованы. <a href="/login">Войти</a>
+        </p>
+      )}
     </main>
   );
 }

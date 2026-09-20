@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { usePathname } from "next/navigation";
 
 const NAV_ITEMS = [
@@ -11,19 +10,21 @@ const NAV_ITEMS = [
   { href: "/profile", label: "Профиль", icon: "/icons/user.svg" },
 ];
 
-function NavIcon({ src, active }: { src: string; active: boolean }) {
+function NavIcon({ src }: { src: string }) {
   return (
-    <span className="relative w-5 h-5 flex-shrink-0 inline-block">
-      <Image
-        src={src}
-        alt=""
-        fill
-        className={active ? "opacity-100" : "opacity-70"}
-        onError={(e) => {
-          (e.target as HTMLImageElement).style.visibility = "hidden";
-        }}
-      />
-    </span>
+    <span
+      className="w-5 h-5 flex-shrink-0 inline-block bg-current"
+      style={{
+        WebkitMaskImage: `url(${src})`,
+        maskImage: `url(${src})`,
+        WebkitMaskRepeat: "no-repeat",
+        maskRepeat: "no-repeat",
+        WebkitMaskPosition: "center",
+        maskPosition: "center",
+        WebkitMaskSize: "contain",
+        maskSize: "contain",
+      }}
+    />
   );
 }
 
@@ -52,7 +53,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                     : "text-white/85 hover:bg-white/10"
                 }`}
               >
-                <NavIcon src={item.icon} active={active} />
+                <NavIcon src={item.icon} />
                 {item.label}
               </Link>
             );
@@ -76,7 +77,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   active ? "text-brand-yellow" : "text-white/70"
                 }`}
               >
-                <NavIcon src={item.icon} active={active} />
+                <NavIcon src={item.icon} />
                 {item.label}
               </Link>
             );

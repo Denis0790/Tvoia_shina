@@ -25,3 +25,12 @@ async def get_current_user(
         raise HTTPException(status_code=401, detail="Пользователь не найден")
 
     return user
+
+
+async def require_manager(user: User = Depends(get_current_user)) -> User:
+    """Отдельная зависимость поверх get_current_user: не только "залогинен",
+    но и конкретно роль manager. Используется на всех эндпоинтах, которые
+    должны быть доступны только персоналу СТО (подтверждение записей и т.п.)."""
+    if user.role != "manager":
+        raise HTTPException(status_code=403, detail="Доступно только менеджерам")
+    return user

@@ -7,7 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_manager
 from app.models import User, Booking, Service
 
 router = APIRouter(prefix="/bookings", tags=["bookings"])
@@ -75,7 +75,7 @@ class BookingConfirm(BaseModel):
 
 
 @router.post("/{booking_id}/confirm")
-async def confirm_booking(booking_id: uuid.UUID, payload: BookingConfirm, db: AsyncSession = Depends(get_db)):
+async def confirm_booking(booking_id: uuid.UUID, payload: BookingConfirm, manager: User = Depends(require_manager), db: AsyncSession = Depends(get_db)):
     values = {"status": "confirmed", "post_id": payload.post_id}
     if payload.duration_minutes is not None:
         values["duration_minutes"] = payload.duration_minutes
@@ -96,7 +96,7 @@ async def confirm_booking(booking_id: uuid.UUID, payload: BookingConfirm, db: As
 
 
 @router.post("/{booking_id}/decline")
-async def decline_booking(booking_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+async def decline_booking(booking_id: uuid.UUID, manager: User = Depends(require_manager), db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         update(Booking).where(Booking.id == booking_id, Booking.status == "pending").values(status="cancelled")
     )
@@ -130,3 +130,22 @@ async def get_my_booking(user: User = Depends(get_current_user), db: AsyncSessio
         "post_id": str(booking.post_id) if booking.post_id else None,
         "comment": booking.comment,
     }
+
+
+@router.get("/pending")
+async def list_pending_bookings(manager: User = Depends(require_manager), db: AsyncSession = Depends(get_db)):
+    """Очередь заявок, ожидающих подтверждения. Только для менеджеров."""
+    result = await db.execute(select(Booking).where(Booking.status == "pending").order_by(Booking.created_at))
+    bookings = result.scalars().all()
+    return [
+        {
+            "id": str(b.id),
+            "user_id": str(b.user_id),
+            "car_id": str(b.car_id) if b.car_id else None,
+            "date": str(b.date),
+            "start_time": b.start_time,
+            "duration_minutes": b.duration_minutes,
+            "comment": b.comment,
+        }
+        for b in bookings
+    ]

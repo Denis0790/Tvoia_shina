@@ -1,7 +1,7 @@
 import pytest
 from datetime import date, timedelta
 
-from app.models import Post, Service
+from app.models import Post, Service, User
 
 
 async def login(client, phone: str) -> str:
@@ -20,13 +20,13 @@ async def test_booking_full_cycle(client, db_session):
     db_session.add_all([post, service])
     await db_session.flush()
 
-    token = await login(client, "+79165554433")
-    headers = {"Authorization": f"Bearer {token}"}
+    client_token = await login(client, "+79165554433")
+    client_headers = {"Authorization": f"Bearer {client_token}"}
 
     r = await client.post(
         "/bookings",
         json={"date": str(tomorrow), "start_time": "11:00", "service_ids": [str(service.id)]},
-        headers=headers,
+        headers=client_headers,
     )
     assert r.status_code == 200
     booking_id = r.json()["id"]
@@ -35,14 +35,32 @@ async def test_booking_full_cycle(client, db_session):
     r_dup = await client.post(
         "/bookings",
         json={"date": str(tomorrow), "start_time": "12:00", "service_ids": [str(service.id)]},
-        headers=headers,
+        headers=client_headers,
     )
     assert r_dup.status_code == 409
 
-    r_confirm = await client.post(f"/bookings/{booking_id}/confirm", json={"post_id": str(post.id)})
+    # Обычный клиент не может подтверждать чужие записи
+    r_forbidden = await client.post(
+        f"/bookings/{booking_id}/confirm", json={"post_id": str(post.id)}, headers=client_headers
+    )
+    assert r_forbidden.status_code == 403
+
+    # Заводим менеджера
+    manager_token = await login(client, "+79165550001")
+    manager_result = await db_session.execute(
+        User.__table__.update().where(User.phone == "+79165550001").values(role="manager")
+    )
+    await db_session.flush()
+    manager_headers = {"Authorization": f"Bearer {manager_token}"}
+
+    r_confirm = await client.post(
+        f"/bookings/{booking_id}/confirm", json={"post_id": str(post.id)}, headers=manager_headers
+    )
     assert r_confirm.status_code == 200
 
-    r_confirm_again = await client.post(f"/bookings/{booking_id}/confirm", json={"post_id": str(post.id)})
+    r_confirm_again = await client.post(
+        f"/bookings/{booking_id}/confirm", json={"post_id": str(post.id)}, headers=manager_headers
+    )
     assert r_confirm_again.status_code == 409
 
 

@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models import User, RefreshToken
 from app.auth_utils import normalize_phone, generate_and_store_otp, check_otp, generate_refresh_token, hash_token
-from app.security import create_access_token
+from app.security import create_access_token, pwd_context
 from datetime import datetime, timezone
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -88,3 +88,22 @@ async def logout(request: Request, response: Response, db: AsyncSession = Depend
 
     response.delete_cookie(REFRESH_COOKIE)
     return {"ok": True}
+
+
+@router.post("/manager-login")
+async def manager_login(login: str, password: str, response: Response, db: AsyncSession = Depends(get_db)):
+    """Вход для персонала по общему логину/паролю — отдельно от SMS-логина клиентов.
+    Пароль хранится как bcrypt-хеш, не в открытом виде."""
+    result = await db.execute(select(User).where(User.login == login, User.role == "manager"))
+    user = result.scalar_one_or_none()
+
+    if user is None or user.password_hash is None or not pwd_context.verify(password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Неверный логин или пароль")
+
+    raw_token, token_hash, expires_at = generate_refresh_token()
+    db.add(RefreshToken(user_id=user.id, token_hash=token_hash, expires_at=expires_at))
+    await db.commit()
+
+    response.set_cookie(REFRESH_COOKIE, raw_token, httponly=True, samesite="lax", max_age=180 * 24 * 3600)
+    access_token = create_access_token(str(user.id))
+    return {"access_token": access_token, "user_id": str(user.id), "role": user.role}

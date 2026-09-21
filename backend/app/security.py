@@ -17,3 +17,12 @@ def decode_access_token(token: str) -> str | None:
         return payload.get("sub")
     except jwt.PyJWTError:
         return None
+
+
+from passlib.context import CryptContext
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+def hash_password(password: str) -> str:
+    return pwd_context.hash(password)

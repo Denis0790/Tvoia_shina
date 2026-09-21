@@ -14,13 +14,19 @@ from app.config import settings
 
 
 def normalize_phone(phone: str) -> str:
-    """Приводит номер к формату +7XXXXXXXXXX. Бросает 400, если после
-    очистки не осталось цифр — иначе легко получить "пользователя" с телефоном '+'."""
+    """Приводит любой ввод к единому формату +7XXXXXXXXXX, чтобы один и тот же
+    номер не мог зарегистрироваться дважды из-за разного написания (с 8, без
+    +, с пробелами и т.д.). Бросает 400 на всё, что не похоже на российский номер."""
     digits = "".join(ch for ch in phone if ch.isdigit())
-    if len(digits) < 10:
-        raise HTTPException(status_code=400, detail="Некорректный номер телефона")
-    if digits.startswith("8"):
+
+    if len(digits) == 11 and digits[0] == "8":
         digits = "7" + digits[1:]
+    elif len(digits) == 10 and digits[0] == "9":
+        digits = "7" + digits
+
+    if len(digits) != 11 or digits[0] != "7":
+        raise HTTPException(status_code=400, detail="Введите номер в формате +7 999 123-45-67 (11 цифр, российский номер)")
+
     return "+" + digits
 
 
@@ -46,3 +52,19 @@ def generate_refresh_token() -> tuple[str, str, datetime]:
     raw = secrets.token_urlsafe(48)
     expires_at = datetime.now(timezone.utc) + timedelta(days=180)
     return raw, hash_token(raw), expires_at
+
+
+def generate_verification_ticket() -> str:
+    return secrets.token_urlsafe(24)
+
+
+async def store_verified_phone(ticket: str, phone: str) -> None:
+    await redis_client.set(f"verified_phone:{ticket}", phone, ex=600)
+
+
+async def get_verified_phone(ticket: str) -> str | None:
+    return await redis_client.get(f"verified_phone:{ticket}")
+
+
+async def consume_verification_ticket(ticket: str) -> None:
+    await redis_client.delete(f"verified_phone:{ticket}")

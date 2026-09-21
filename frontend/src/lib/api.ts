@@ -107,3 +107,13 @@ export async function createBooking(payload: {
   }
   return { ok: true };
 }
+
+export async function managerLogin(login: string, password: string) {
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const res = await fetch(
+    `${API_URL}/auth/manager-login?login=${encodeURIComponent(login)}&password=${encodeURIComponent(password)}`,
+    { method: "POST", credentials: "include" }
+  );
+  if (!res.ok) throw new Error("Неверный логин или пароль");
+  return res.json();
+}

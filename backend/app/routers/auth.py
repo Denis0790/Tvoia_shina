@@ -42,7 +42,7 @@ async def verify_code(phone: str, code: str, response: Response, db: AsyncSessio
         REFRESH_COOKIE, raw_token, httponly=True, samesite="lax", max_age=180 * 24 * 3600,
     )
     access_token = create_access_token(str(user.id))
-    return {"access_token": access_token, "user_id": str(user.id)}
+    return {"access_token": access_token, "user_id": str(user.id), "role": user.role}
 
 
 @router.post("/refresh")

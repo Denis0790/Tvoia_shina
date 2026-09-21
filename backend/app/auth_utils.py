@@ -1,14 +1,24 @@
+"""Утилиты для OTP-авторизации по телефону: нормализация номера, генерация
+и проверка кода через Redis (с TTL — код сам "истекает", ничего не чистим руками),
+и генерация refresh token в виде случайной строки, а не JWT (хранится как хеш в БД,
+что бы утечка базы не давала возможность использовать токены напрямую)."""
+
 import hashlib
 import secrets
 import random
 from datetime import datetime, timedelta, timezone
 
+from fastapi import HTTPException
 from app.redis_client import redis_client
 from app.config import settings
 
 
 def normalize_phone(phone: str) -> str:
+    """Приводит номер к формату +7XXXXXXXXXX. Бросает 400, если после
+    очистки не осталось цифр — иначе легко получить "пользователя" с телефоном '+'."""
     digits = "".join(ch for ch in phone if ch.isdigit())
+    if len(digits) < 10:
+        raise HTTPException(status_code=400, detail="Некорректный номер телефона")
     if digits.startswith("8"):
         digits = "7" + digits[1:]
     return "+" + digits

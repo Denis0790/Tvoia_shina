@@ -44,3 +44,30 @@ async def test_booking_full_cycle(client, db_session):
 
     r_confirm_again = await client.post(f"/bookings/{booking_id}/confirm", json={"post_id": str(post.id)})
     assert r_confirm_again.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_get_my_booking(client, db_session):
+    tomorrow = date.today() + timedelta(days=3)
+
+    post = Post(name="Пост для get_my_booking", work_start="09:00", work_end="18:00", work_days="1111111")
+    service = Service(name="Диагностика", duration_minutes=60)
+    db_session.add_all([post, service])
+    await db_session.flush()
+
+    token = await login(client, "+79165554499")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    r_empty = await client.get("/bookings/me", headers=headers)
+    assert r_empty.status_code == 200
+    assert r_empty.json() is None
+
+    await client.post(
+        "/bookings",
+        json={"date": str(tomorrow), "start_time": "10:00", "service_ids": [str(service.id)]},
+        headers=headers,
+    )
+
+    r = await client.get("/bookings/me", headers=headers)
+    assert r.status_code == 200
+    assert r.json()["status"] == "pending"

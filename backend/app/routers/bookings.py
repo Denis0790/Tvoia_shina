@@ -106,3 +106,27 @@ async def decline_booking(booking_id: uuid.UUID, db: AsyncSession = Depends(get_
         raise HTTPException(status_code=409, detail="Запись уже обработана другим менеджером")
 
     return {"ok": True}
+
+
+@router.get("/me")
+async def get_my_booking(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Возвращает активную (pending/confirmed) запись клиента, если есть —
+    именно ту единственную, что разрешена правилом "одна активная запись на клиента"."""
+    result = await db.execute(
+        select(Booking)
+        .where(Booking.user_id == user.id, Booking.status.in_(["pending", "confirmed"]))
+        .order_by(Booking.created_at.desc())
+    )
+    booking = result.scalars().first()
+    if booking is None:
+        return None
+
+    return {
+        "id": str(booking.id),
+        "date": str(booking.date),
+        "start_time": booking.start_time,
+        "duration_minutes": booking.duration_minutes,
+        "status": booking.status,
+        "post_id": str(booking.post_id) if booking.post_id else None,
+        "comment": booking.comment,
+    }

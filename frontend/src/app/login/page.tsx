@@ -1,31 +1,53 @@
 "use client";
 
 import { useState } from "react";
-import { requestCode, verifyCode, managerLogin } from "@/lib/api";
+import { login, requestCode, verifyCode, setPassword } from "@/lib/api";
 import { setAccessToken } from "@/lib/auth";
 import PhoneInput from "@/components/PhoneInput";
 
-export default function LoginPage() {
-  const [mode, setMode] = useState<"client" | "manager">("client");
+type Screen = "login" | "code" | "newPassword";
 
-  const [step, setStep] = useState<"phone" | "code">("phone");
+export default function LoginPage() {
+  const [screen, setScreen] = useState<Screen>("login");
   const [phoneDigits, setPhoneDigits] = useState("");
+  const [password, setPassword_] = useState("");
+
   const [code, setCode] = useState("");
   const [debugCode, setDebugCode] = useState("");
+  const [ticket, setTicket] = useState("");
 
-  const [login, setLogin] = useState("");
-  const [password, setPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [newPassword2, setNewPassword2] = useState("");
 
   const [error, setError] = useState("");
+  const [notFound, setNotFound] = useState(false);
 
   const fullPhone = `+7${phoneDigits}`;
 
-  async function handleRequestCode() {
+  async function handleLogin() {
+    setError("");
+    setNotFound(false);
+    try {
+      const data = await login(fullPhone, password);
+      setAccessToken(data.access_token);
+      window.location.href = "/";
+    } catch (e: unknown) {
+      const err = e as { status?: number; detail?: string };
+      if (err.status === 404) {
+        setNotFound(true);
+        setError("Аккаунт с таким номером не найден");
+      } else {
+        setError(err.detail || "Неверный пароль");
+      }
+    }
+  }
+
+  async function handleSendCode() {
     setError("");
     try {
       const data = await requestCode(fullPhone);
       setDebugCode(data.debug_code);
-      setStep("code");
+      setScreen("code");
     } catch {
       setError("Не удалось отправить код, проверьте номер");
     }
@@ -35,108 +57,148 @@ export default function LoginPage() {
     setError("");
     try {
       const data = await verifyCode(fullPhone, code);
-      setAccessToken(data.access_token);
-      window.location.href = "/";
+      setTicket(data.ticket);
+      setScreen("newPassword");
     } catch {
       setError("Неверный код");
     }
   }
 
-  async function handleManagerLogin() {
+  async function handleSetPassword() {
     setError("");
+    if (newPassword.length < 4) {
+      setError("Пароль должен быть не короче 4 символов");
+      return;
+    }
+    if (newPassword !== newPassword2) {
+      setError("Пароли не совпадают");
+      return;
+    }
     try {
-      const data = await managerLogin(login, password);
+      const data = await setPassword(ticket, newPassword);
       setAccessToken(data.access_token);
-      window.location.href = "/nord";
-    } catch {
-      setError("Неверный логин или пароль");
+      window.location.href = "/";
+    } catch (e: unknown) {
+      const err = e as Error;
+      setError(err.message || "Не удалось сохранить пароль");
     }
   }
 
   return (
     <main className="min-h-screen w-full bg-brand-blue flex items-center justify-center p-6">
-      <div className="w-full max-w-sm bg-white rounded-2xl p-6 shadow-lg">
-        <h1 className="text-lg font-semibold text-gray-900 mb-1">Твоя Шина</h1>
-        <p className="text-sm text-gray-500 mb-5">Вход в аккаунт</p>
-
-        <div className="flex gap-1 bg-gray-100 rounded-lg p-1 mb-5">
-          <button
-            onClick={() => setMode("client")}
-            className={`flex-1 text-sm py-1.5 rounded-md ${
-              mode === "client" ? "bg-white shadow-sm font-medium text-gray-900" : "text-gray-500"
-            }`}
-          >
-            Клиент
-          </button>
-          <button
-            onClick={() => setMode("manager")}
-            className={`flex-1 text-sm py-1.5 rounded-md ${
-              mode === "manager" ? "bg-white shadow-sm font-medium text-gray-900" : "text-gray-500"
-            }`}
-          >
-            Сотрудник
-          </button>
+      <div className="w-full max-w-md bg-white rounded-3xl p-8 md:p-10 shadow-xl">
+        <div className="flex items-center gap-3 mb-8">
+          <div className="w-10 h-10 rounded-xl bg-brand-yellow flex items-center justify-center text-brand-blue-dark font-bold text-lg">
+            Т
+          </div>
+          <span className="text-lg font-semibold text-gray-900">Твоя Шина</span>
         </div>
 
-        {mode === "client" && step === "phone" && (
+        {screen === "login" && (
           <>
+            <h1 className="text-xl font-semibold text-gray-900 mb-1">Вход</h1>
+            <p className="text-sm text-gray-500 mb-6">Введите номер телефона и пароль</p>
+
+            <p className="text-xs text-gray-500 mb-1.5">Телефон</p>
             <PhoneInput
               value={phoneDigits}
               onChange={setPhoneDigits}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm mb-3 tracking-wide"
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm mb-4 tracking-wide"
             />
+
+            <p className="text-xs text-gray-500 mb-1.5">Пароль</p>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword_(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm mb-5"
+            />
+
             <button
-              onClick={handleRequestCode}
-              className="w-full bg-brand-yellow text-brand-blue-dark font-medium text-sm rounded-lg py-2.5"
+              onClick={handleLogin}
+              className="w-full bg-brand-yellow text-brand-blue-dark font-semibold text-sm rounded-xl py-3.5"
             >
-              Получить код
+              Войти
             </button>
+
+            {error && <p className="text-xs text-red-500 mt-3 text-center">{error}</p>}
+
+            <div className="flex items-center justify-between mt-5 text-xs">
+              {notFound ? (
+                <button onClick={handleSendCode} className="text-brand-blue font-medium mx-auto">
+                  Зарегистрироваться
+                </button>
+              ) : (
+                <button onClick={handleSendCode} className="text-gray-400 hover:text-gray-600 mx-auto">
+                  Забыли пароль?
+                </button>
+              )}
+            </div>
           </>
         )}
 
-        {mode === "client" && step === "code" && (
+        {screen === "code" && (
           <>
-            <p className="text-xs text-gray-400 mb-2">Тестовый режим: код — {debugCode}</p>
+            <h1 className="text-xl font-semibold text-gray-900 mb-1">Подтверждение</h1>
+            <p className="text-sm text-gray-500 mb-1">Мы отправили код на {fullPhone}</p>
+            <p className="text-xs text-gray-400 mb-6">Тестовый режим: код — {debugCode}</p>
+
             <input
               placeholder="Код из SMS"
               value={code}
               onChange={(e) => setCode(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm mb-3"
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm mb-5 text-center tracking-widest text-lg"
             />
+
             <button
               onClick={handleVerifyCode}
-              className="w-full bg-brand-yellow text-brand-blue-dark font-medium text-sm rounded-lg py-2.5"
+              className="w-full bg-brand-yellow text-brand-blue-dark font-semibold text-sm rounded-xl py-3.5"
             >
-              Войти
+              Подтвердить
             </button>
-          </>
-        )}
 
-        {mode === "manager" && (
-          <>
-            <input
-              placeholder="Логин"
-              value={login}
-              onChange={(e) => setLogin(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm mb-3"
-            />
-            <input
-              placeholder="Пароль"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm mb-3"
-            />
+            {error && <p className="text-xs text-red-500 mt-3 text-center">{error}</p>}
+
             <button
-              onClick={handleManagerLogin}
-              className="w-full bg-brand-yellow text-brand-blue-dark font-medium text-sm rounded-lg py-2.5"
+              onClick={() => setScreen("login")}
+              className="text-xs text-gray-400 hover:text-gray-600 mt-5 block mx-auto"
             >
-              Войти
+              Назад
             </button>
           </>
         )}
 
-        {error && <p className="text-xs text-red-500 mt-3 text-center">{error}</p>}
+        {screen === "newPassword" && (
+          <>
+            <h1 className="text-xl font-semibold text-gray-900 mb-1">Придумайте пароль</h1>
+            <p className="text-sm text-gray-500 mb-6">Номер подтверждён, осталось задать пароль</p>
+
+            <p className="text-xs text-gray-500 mb-1.5">Новый пароль</p>
+            <input
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm mb-4"
+            />
+
+            <p className="text-xs text-gray-500 mb-1.5">Повторите пароль</p>
+            <input
+              type="password"
+              value={newPassword2}
+              onChange={(e) => setNewPassword2(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm mb-5"
+            />
+
+            <button
+              onClick={handleSetPassword}
+              className="w-full bg-brand-yellow text-brand-blue-dark font-semibold text-sm rounded-xl py-3.5"
+            >
+              Готово
+            </button>
+
+            {error && <p className="text-xs text-red-500 mt-3 text-center">{error}</p>}
+          </>
+        )}
       </div>
     </main>
   );

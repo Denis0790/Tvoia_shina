@@ -9,12 +9,41 @@ export async function requestCode(phone: string) {
   return res.json();
 }
 
-export async function verifyCode(phone: string, code: string) {
+export async function verifyCode(phone: string, code: string): Promise<{ ticket: string }> {
   const res = await fetch(
     `${API_URL}/auth/verify-code?phone=${encodeURIComponent(phone)}&code=${encodeURIComponent(code)}`,
-    { method: "POST", credentials: "include" }
+    { method: "POST" }
   );
   if (!res.ok) throw new Error("Неверный код");
+  return res.json();
+}
+
+export async function setPassword(ticket: string, password: string) {
+  const res = await fetch(
+    `${API_URL}/auth/set-password?ticket=${encodeURIComponent(ticket)}&password=${encodeURIComponent(password)}`,
+    { method: "POST", credentials: "include" }
+  );
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new Error(data?.detail || "Не удалось задать пароль");
+  }
+  return res.json();
+}
+
+export async function login(phone: string, password: string) {
+  const res = await fetch(
+    `${API_URL}/auth/login?phone=${encodeURIComponent(phone)}&password=${encodeURIComponent(password)}`,
+    { method: "POST", credentials: "include" }
+  );
+  if (!res.ok) {
+    const err: { status: number; detail: string } = {
+      status: res.status,
+      detail: "Ошибка входа",
+    };
+    const data = await res.json().catch(() => null);
+    if (data?.detail) err.detail = data.detail;
+    throw err;
+  }
   return res.json();
 }
 

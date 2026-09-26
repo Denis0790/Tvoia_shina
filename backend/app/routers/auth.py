@@ -14,6 +14,7 @@ from app.database import get_db
 from app.models import User, RefreshToken
 from app.auth_utils import (
     normalize_phone,
+    check_otp_rate_limit,
     generate_and_store_otp,
     check_otp,
     generate_refresh_token,
@@ -44,10 +45,14 @@ async def _issue_tokens(user: User, response: Response, db: AsyncSession) -> dic
 
 
 @router.post("/request-code")
-async def request_code(phone: str):
+async def request_code(phone: str, request: Request):
     """Шлёт SMS-код. Используется и для регистрации, и для восстановления пароля —
-    на этом шаге ещё не знаем, есть пользователь или нет, это неважно."""
+    на этом шаге ещё не знаем, есть пользователь или нет, это неважно.
+    Защищено лимитами (см. check_otp_rate_limit), иначе это открытый вектор
+    для накрутки платных SMS на чужой номер."""
     phone = normalize_phone(phone)
+    client_ip = request.client.host if request.client else "unknown"
+    await check_otp_rate_limit(phone, client_ip)
     code = await generate_and_store_otp(phone)
     # TODO: подключить реального SMS-провайдера. Пока возвращаем код в ответе для теста.
     return {"phone": phone, "debug_code": code}

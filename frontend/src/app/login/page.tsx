@@ -48,8 +48,9 @@ export default function LoginPage() {
       const data = await requestCode(fullPhone);
       setDebugCode(data.debug_code);
       setScreen("code");
-    } catch {
-      setError("Не удалось отправить код, проверьте номер");
+    } catch (e: unknown) {
+      const err = e as Error;
+      setError(err.message || "Не удалось отправить код, проверьте номер");
     }
   }
 

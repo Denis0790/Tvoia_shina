@@ -5,7 +5,10 @@ export async function requestCode(phone: string) {
   const res = await fetch(`${API_URL}/auth/request-code?phone=${encodeURIComponent(phone)}`, {
     method: "POST",
   });
-  if (!res.ok) throw new Error("Не удалось запросить код");
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new Error(data?.detail || "Не удалось запросить код");
+  }
   return res.json();
 }
 

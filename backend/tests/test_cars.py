@@ -1,17 +1,11 @@
 import pytest
-
-
-async def login(client, phone: str) -> str:
-    r = await client.post("/auth/request-code", params={"phone": phone})
-    code = r.json()["debug_code"]
-    r = await client.post("/auth/verify-code", params={"phone": phone, "code": code})
-    return r.json()["access_token"]
+from tests.conftest_helpers import register_and_login
 
 
 @pytest.mark.asyncio
 async def test_car_crud_and_isolation(client):
-    token_a = await login(client, "+79161110001")
-    token_b = await login(client, "+79161110002")
+    token_a = await register_and_login(client, "+79161110001")
+    token_b = await register_and_login(client, "+79161110002")
 
     headers_a = {"Authorization": f"Bearer {token_a}"}
     headers_b = {"Authorization": f"Bearer {token_b}"}

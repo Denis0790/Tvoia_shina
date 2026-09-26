@@ -3,12 +3,13 @@
 import { useState } from "react";
 import { requestCode, verifyCode, managerLogin } from "@/lib/api";
 import { setAccessToken } from "@/lib/auth";
+import PhoneInput from "@/components/PhoneInput";
 
 export default function LoginPage() {
   const [mode, setMode] = useState<"client" | "manager">("client");
 
   const [step, setStep] = useState<"phone" | "code">("phone");
-  const [phone, setPhone] = useState("");
+  const [phoneDigits, setPhoneDigits] = useState("");
   const [code, setCode] = useState("");
   const [debugCode, setDebugCode] = useState("");
 
@@ -17,10 +18,12 @@ export default function LoginPage() {
 
   const [error, setError] = useState("");
 
+  const fullPhone = `+7${phoneDigits}`;
+
   async function handleRequestCode() {
     setError("");
     try {
-      const data = await requestCode(phone);
+      const data = await requestCode(fullPhone);
       setDebugCode(data.debug_code);
       setStep("code");
     } catch {
@@ -31,7 +34,7 @@ export default function LoginPage() {
   async function handleVerifyCode() {
     setError("");
     try {
-      const data = await verifyCode(phone, code);
+      const data = await verifyCode(fullPhone, code);
       setAccessToken(data.access_token);
       window.location.href = "/";
     } catch {
@@ -77,11 +80,10 @@ export default function LoginPage() {
 
         {mode === "client" && step === "phone" && (
           <>
-            <input
-              placeholder="+7 999 123-45-67"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm mb-3"
+            <PhoneInput
+              value={phoneDigits}
+              onChange={setPhoneDigits}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm mb-3 tracking-wide"
             />
             <button
               onClick={handleRequestCode}

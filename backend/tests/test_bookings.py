@@ -2,13 +2,7 @@ import pytest
 from datetime import date, timedelta
 
 from app.models import Post, Service, User
-
-
-async def login(client, phone: str) -> str:
-    r = await client.post("/auth/request-code", params={"phone": phone})
-    code = r.json()["debug_code"]
-    r = await client.post("/auth/verify-code", params={"phone": phone, "code": code})
-    return r.json()["access_token"]
+from tests.conftest_helpers import register_and_login
 
 
 @pytest.mark.asyncio
@@ -20,7 +14,7 @@ async def test_booking_full_cycle(client, db_session):
     db_session.add_all([post, service])
     await db_session.flush()
 
-    client_token = await login(client, "+79165554433")
+    client_token = await register_and_login(client, "+79165554433")
     client_headers = {"Authorization": f"Bearer {client_token}"}
 
     r = await client.post(
@@ -39,15 +33,13 @@ async def test_booking_full_cycle(client, db_session):
     )
     assert r_dup.status_code == 409
 
-    # Обычный клиент не может подтверждать чужие записи
     r_forbidden = await client.post(
         f"/bookings/{booking_id}/confirm", json={"post_id": str(post.id)}, headers=client_headers
     )
     assert r_forbidden.status_code == 403
 
-    # Заводим менеджера
-    manager_token = await login(client, "+79165550001")
-    manager_result = await db_session.execute(
+    manager_token = await register_and_login(client, "+79165550001")
+    await db_session.execute(
         User.__table__.update().where(User.phone == "+79165550001").values(role="manager")
     )
     await db_session.flush()
@@ -73,7 +65,7 @@ async def test_get_my_booking(client, db_session):
     db_session.add_all([post, service])
     await db_session.flush()
 
-    token = await login(client, "+79165554499")
+    token = await register_and_login(client, "+79165554499")
     headers = {"Authorization": f"Bearer {token}"}
 
     r_empty = await client.get("/bookings/me", headers=headers)

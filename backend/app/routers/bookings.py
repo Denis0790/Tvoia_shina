@@ -29,6 +29,9 @@ async def create_booking(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    if payload.date < date_type.today():
+        raise HTTPException(status_code=400, detail="Нельзя записаться на прошедшую дату")
+
     # Правило: одна активная запись на клиента
     result = await db.execute(
         select(Booking).where(

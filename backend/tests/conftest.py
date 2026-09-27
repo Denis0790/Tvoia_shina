@@ -45,6 +45,11 @@ async def db_session():
 @pytest_asyncio.fixture(autouse=True)
 async def reset_redis_connection():
     await redis_client.aclose()
+    # Rate-limit ключи (кулдаун/дневные лимиты SMS) не откатываются транзакцией
+    # Postgres, поэтому чистим их отдельно, иначе тесты бьющие на один и тот же
+    # телефон несколько раз начинают падать на "слишком много попыток".
+    async for key in redis_client.scan_iter("otp*"):
+        await redis_client.delete(key)
     yield
     await redis_client.aclose()
 

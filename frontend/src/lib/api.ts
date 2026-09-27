@@ -149,3 +149,41 @@ export async function managerLogin(login: string, password: string) {
   if (!res.ok) throw new Error("Неверный логин или пароль");
   return res.json();
 }
+
+export type PendingBooking = {
+  id: string;
+  user_id: string;
+  car_id: string | null;
+  date: string;
+  start_time: string;
+  duration_minutes: number;
+  comment: string | null;
+};
+
+export async function getPendingBookings(): Promise<PendingBooking[]> {
+  const res = await apiFetch("/bookings/pending");
+  if (!res.ok) return [];
+  return res.json();
+}
+
+export async function confirmBooking(id: string, postId: string, durationMinutes?: number) {
+  const res = await apiFetch(`/bookings/${id}/confirm`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ post_id: postId, duration_minutes: durationMinutes }),
+  });
+  return res.ok;
+}
+
+export async function declineBooking(id: string) {
+  const res = await apiFetch(`/bookings/${id}/decline`, { method: "POST" });
+  return res.ok;
+}
+
+export type PostInfo = { id: string; name: string; work_start: string; work_end: string; work_days: string };
+
+export async function getPosts(): Promise<PostInfo[]> {
+  const res = await apiFetch("/posts");
+  if (!res.ok) return [];
+  return res.json();
+}

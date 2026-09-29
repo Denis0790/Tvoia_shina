@@ -1,4 +1,5 @@
 import { apiFetch } from "@/lib/auth";
+import { managerApiFetch } from "@/lib/managerAuth";
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export async function requestCode(phone: string) {
@@ -161,13 +162,13 @@ export type PendingBooking = {
 };
 
 export async function getPendingBookings(): Promise<PendingBooking[]> {
-  const res = await apiFetch("/bookings/pending");
+  const res = await managerApiFetch("/bookings/pending");
   if (!res.ok) return [];
   return res.json();
 }
 
 export async function confirmBooking(id: string, postId: string, durationMinutes?: number) {
-  const res = await apiFetch(`/bookings/${id}/confirm`, {
+  const res = await managerApiFetch(`/bookings/${id}/confirm`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ post_id: postId, duration_minutes: durationMinutes }),
@@ -176,14 +177,14 @@ export async function confirmBooking(id: string, postId: string, durationMinutes
 }
 
 export async function declineBooking(id: string) {
-  const res = await apiFetch(`/bookings/${id}/decline`, { method: "POST" });
+  const res = await managerApiFetch(`/bookings/${id}/decline`, { method: "POST" });
   return res.ok;
 }
 
 export type PostInfo = { id: string; name: string; work_start: string; work_end: string; work_days: string };
 
 export async function getPosts(): Promise<PostInfo[]> {
-  const res = await apiFetch("/posts");
+  const res = await managerApiFetch("/posts");
   if (!res.ok) return [];
   return res.json();
 }

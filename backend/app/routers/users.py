@@ -11,4 +11,5 @@ async def read_me(user: User = Depends(get_current_user)):
         "id": str(user.id),
         "phone": user.phone,
         "full_name": user.full_name,
+        "role": user.role,
     }

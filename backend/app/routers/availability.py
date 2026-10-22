@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models import Post, Booking, ScheduleException
+from app.routers.bookings import _now_msk
 
 router = APIRouter(prefix="/availability", tags=["availability"])
 
@@ -45,6 +46,13 @@ async def get_slots(target_date: date_type = Query(...), db: AsyncSession = Depe
 
     weekday_index = target_date.weekday()  # 0 = Пн
 
+    # прошедшее время (по Москве) выбрать нельзя — слот считается занятым
+    now = _now_msk()
+    now_minutes = now.hour * 60 + now.minute
+
+    def is_past(minute: int) -> bool:
+        return target_date < now.date() or (target_date == now.date() and minute <= now_minutes)
+
     posts_availability = []
     for post in posts:
         exception = exceptions_by_post.get(post.id)
@@ -72,7 +80,7 @@ async def get_slots(target_date: date_type = Query(...), db: AsyncSession = Depe
         slots = []
         m = start_min
         while m < end_min:
-            slots.append({"time": minutes_to_time(m), "free": m not in occupied})
+            slots.append({"time": minutes_to_time(m), "free": m not in occupied and not is_past(m)})
             m += SLOT_STEP_MINUTES
 
         posts_availability.append(

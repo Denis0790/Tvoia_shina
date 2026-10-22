@@ -2,7 +2,8 @@ from app.models.user import User, OAuthAccount, RefreshToken
 from app.models.car import Car
 from app.models.post import Post, ScheduleException
 from app.models.service import Service
-from app.models.booking import Booking
+from app.models.booking import Booking, booking_services
+from app.models.profile import ServiceProfile, ProfilePhoto, NewsItem
 
 __all__ = [
     "User",
@@ -13,4 +14,8 @@ __all__ = [
     "ScheduleException",
     "Service",
     "Booking",
+    "booking_services",
+    "ServiceProfile",
+    "ProfilePhoto",
+    "NewsItem",
 ]

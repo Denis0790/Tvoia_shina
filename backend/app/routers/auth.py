@@ -11,7 +11,7 @@
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Response, Request
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -146,6 +146,18 @@ async def login(phone: str, password: str, response: Response, db: AsyncSession 
         raise HTTPException(status_code=404, detail="Аккаунт не найден")
     if user.password_hash is None or not pwd_context.verify(password, user.password_hash):
         raise HTTPException(status_code=401, detail="Неверный пароль")
+
+    return await _issue_tokens(user, response, db, CLIENT_COOKIE)
+
+
+@router.post("/org-login")
+async def org_login(login: str, password: str, response: Response, db: AsyncSession = Depends(get_db)):
+    """Вход организации по логину (ИНН) и паролю, которые выдал менеджер."""
+    result = await db.execute(select(User).where(func.lower(User.login) == login.strip().lower(), User.kind == "org"))
+    user = result.scalar_one_or_none()
+
+    if user is None or user.password_hash is None or not pwd_context.verify(password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Неверный логин или пароль")
 
     return await _issue_tokens(user, response, db, CLIENT_COOKIE)
 

@@ -27,3 +27,6 @@ class ScheduleException(Base):
     is_working: Mapped[bool] = mapped_column()
     work_start: Mapped[str | None] = mapped_column(String(5), nullable=True)
     work_end: Mapped[str | None] = mapped_column(String(5), nullable=True)
+    # Тип периода недоступности: dayoff / vacation / sick / repair / other
+    kind: Mapped[str] = mapped_column(String(20), default="dayoff", server_default="dayoff")
+    note: Mapped[str | None] = mapped_column(String(200), nullable=True)

@@ -32,9 +32,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   return (
-    <div className="min-h-screen w-full bg-brand-blue flex justify-center">
-      <div className="w-full max-w-[1280px] flex md:pt-4 md:pb-4">
-        <aside className="hidden md:flex w-60 flex-shrink-0 flex-col p-4 gap-1">
+    <div className="min-h-screen w-full bg-gradient-to-br from-brand-blue-dark via-brand-blue to-brand-blue flex justify-center">
+      <div aria-hidden className="pointer-events-none fixed inset-0 overflow-hidden">
+        <div className="absolute -top-40 -left-32 w-[560px] h-[560px] rounded-full bg-white/10 blur-3xl" />
+        <div className="absolute -bottom-48 -right-32 w-[520px] h-[520px] rounded-full bg-brand-yellow/10 blur-3xl" />
+      </div>
+      <div className="relative w-full max-w-[1280px] flex md:pt-4 md:pb-4">
+        <aside className="hidden md:flex w-56 flex-shrink-0 flex-col p-4 gap-1">
           <div className="flex items-center gap-2 px-2 mb-8">
             <div className="w-8 h-8 rounded-lg bg-brand-yellow flex items-center justify-center text-brand-blue-dark font-bold">
               Т
@@ -62,7 +66,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
         <div className="flex-1 min-w-0 flex flex-col pb-16 md:pb-0">
           <main className="flex-1 min-w-0 bg-[#f6f6f4] md:rounded-[12px]">
-            <div className="max-w-[820px] mx-auto w-full p-6 md:p-10">{children}</div>
+            <div className="mx-auto w-full p-6 md:p-10">{children}</div>
           </main>
         </div>
 

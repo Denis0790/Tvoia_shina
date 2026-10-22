@@ -34,7 +34,7 @@ export default function PhoneInput({
   }
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const digits = phoneToDigits(e.target.value);
+    const digits = phoneToDigits(e.target.value).slice(0, 10);
     onChange(digits);
   }
 

@@ -15,6 +15,7 @@ from app.routers.bookings import router as bookings_router
 from app.routers.services import router as services_router
 from app.routers.posts import router as posts_router
 from app.routers.profile import router as profile_router, UPLOAD_DIR
+from app.routers.chat import router as chat_router
 
 
 @asynccontextmanager
@@ -77,6 +78,7 @@ app.include_router(bookings_router)
 app.include_router(services_router)
 app.include_router(posts_router)
 app.include_router(profile_router)
+app.include_router(chat_router)
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 

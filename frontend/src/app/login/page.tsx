@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { login, orgLogin, requestCode, verifyCode, setPassword } from "@/lib/api";
+import { login, orgLogin, managerLogin, requestCode, verifyCode, setPassword } from "@/lib/api";
 import { setAccessToken } from "@/lib/auth";
+import { setManagerAccessToken } from "@/lib/managerAuth";
 import AutoBackdrop from "@/components/AutoBackdrop";
 
 type Screen = "login" | "code" | "newPassword";
@@ -90,9 +91,29 @@ export default function LoginPage() {
     }
     setBusy(true);
     try {
-      const data = phoneMode ? await login(fullPhone, password) : await orgLogin(ident.trim(), password);
-      setAccessToken(data.access_token);
-      window.location.href = "/";
+      if (phoneMode) {
+        const data = await login(fullPhone, password);
+        setAccessToken(data.access_token);
+        window.location.href = "/";
+        return;
+      }
+      // текстовый логин: сначала организация, затем менеджер
+      try {
+        const data = await orgLogin(ident.trim(), password);
+        setAccessToken(data.access_token);
+        window.location.href = "/";
+        return;
+      } catch {
+        let m;
+        try {
+          m = await managerLogin(ident.trim(), password);
+        } catch {
+          throw { detail: "Неверный логин или пароль" };
+        }
+        setManagerAccessToken(m.access_token);
+        window.location.href = "/nord";
+        return;
+      }
     } catch (e: unknown) {
       const err = e as { status?: number; detail?: string };
       if (phoneMode && err.status === 404) {

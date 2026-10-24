@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { managerApiFetch, refreshManagerAccessToken, setManagerAccessToken } from "@/lib/managerAuth";
-import { managerLogin } from "@/lib/api";
+import { managerApiFetch, refreshManagerAccessToken } from "@/lib/managerAuth";
+import { managerSocket } from "@/lib/chatSocket";
+import { useChatCounters } from "@/lib/useChatCounters";
 
 type Me = { id: string; phone: string | null; role: string; full_name: string | null };
 
@@ -40,10 +41,6 @@ export default function NordLayout({ children }: { children: React.ReactNode }) 
   const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const [login, setLogin] = useState("");
-  const [password, setPassword] = useState("");
-  const [loginError, setLoginError] = useState("");
-
   useEffect(() => {
     refreshManagerAccessToken()
       .then(() => managerApiFetch("/users/me"))
@@ -54,50 +51,20 @@ export default function NordLayout({ children }: { children: React.ReactNode }) 
       .finally(() => setLoading(false));
   }, []);
 
-  async function handleLogin() {
-    setLoginError("");
-    try {
-      const data = await managerLogin(login, password);
-      setManagerAccessToken(data.access_token);
-      setMe(data);
-    } catch {
-      setLoginError("Неверный логин или пароль");
-    }
-  }
+  useEffect(() => {
+    if (!loading && !me) window.location.replace("/login");
+  }, [loading, me]);
 
-  if (loading) {
+  const { unread_messages, pending_bookings, refresh } = useChatCounters(managerApiFetch, managerSocket, !!me);
+  useEffect(() => {
+    if (me) refresh();
+  }, [pathname, me, refresh]);
+  const badges: Record<string, number> = { "/nord/chat": unread_messages, "/nord/calendar": pending_bookings };
+
+  if (loading || !me) {
     return (
       <main className="min-h-screen w-full bg-brand-blue flex items-center justify-center">
         <p className="text-white text-sm">Загрузка…</p>
-      </main>
-    );
-  }
-
-  if (!me) {
-    return (
-      <main className="min-h-screen w-full bg-brand-blue flex items-center justify-center p-6">
-        <div className="w-full max-w-sm bg-white rounded-2xl p-6 shadow-lg">
-          <input
-            placeholder="Логин"
-            value={login}
-            onChange={(e) => setLogin(e.target.value)}
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm mb-3"
-          />
-          <input
-            placeholder="Пароль"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm mb-3"
-          />
-          <button
-            onClick={handleLogin}
-            className="w-full bg-brand-yellow text-brand-blue-dark font-medium text-sm rounded-lg py-2.5"
-          >
-            Войти
-          </button>
-          {loginError && <p className="text-xs text-red-500 mt-3 text-center">{loginError}</p>}
-        </div>
       </main>
     );
   }
@@ -118,6 +85,7 @@ export default function NordLayout({ children }: { children: React.ReactNode }) 
           </div>
           {NAV_ITEMS.map((item) => {
             const active = pathname === item.href;
+            const badge = badges[item.href] || 0;
             return (
               <Link
                 key={item.href}
@@ -130,6 +98,15 @@ export default function NordLayout({ children }: { children: React.ReactNode }) 
               >
                 <NavIcon src={item.icon} active={active} />
                 {item.label}
+                {badge > 0 && (
+                  <span
+                    className={`ml-auto min-w-5 h-5 px-1.5 rounded-full text-[11px] font-bold flex items-center justify-center ${
+                      active ? "bg-brand-blue-dark text-white" : "bg-brand-yellow text-brand-blue-dark"
+                    }`}
+                  >
+                    {badge}
+                  </span>
+                )}
               </Link>
             );
           })}

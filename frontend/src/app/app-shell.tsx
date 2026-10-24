@@ -1,7 +1,12 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { apiFetch } from "@/lib/auth";
+import { getMe } from "@/lib/api";
+import { clientSocket } from "@/lib/chatSocket";
+import { useChatCounters } from "@/lib/useChatCounters";
 
 const NAV_ITEMS = [
   { href: "/", label: "Главная", icon: "/icons/home.svg" },
@@ -30,6 +35,30 @@ function NavIcon({ src }: { src: string }) {
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const [authed, setAuthed] = useState(false);
+
+  useEffect(() => {
+    if (authed) return;
+    let cancelled = false;
+    const check = () =>
+      getMe()
+        .then((m) => {
+          if (!cancelled && m && m.role !== "manager") setAuthed(true);
+        })
+        .catch(() => {});
+    check();
+    const t = setTimeout(check, 3000); // повтор: при загрузке токен могут обновлять сразу несколько запросов
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [authed, pathname]);
+
+  const { unread_messages, refresh } = useChatCounters(apiFetch, clientSocket, authed);
+  useEffect(() => {
+    if (authed) refresh();
+  }, [pathname, authed, refresh]);
+  const badges: Record<string, number> = { "/messages": unread_messages };
 
   return (
     <div className="min-h-screen w-full bg-gradient-to-br from-brand-blue-dark via-brand-blue to-brand-blue flex justify-center">
@@ -47,6 +76,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </div>
           {NAV_ITEMS.map((item) => {
             const active = pathname === item.href;
+            const badge = badges[item.href] || 0;
             return (
               <Link
                 key={item.href}
@@ -59,6 +89,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               >
                 <NavIcon src={item.icon} />
                 {item.label}
+                {badge > 0 && (
+                  <span
+                    className={`ml-auto min-w-5 h-5 px-1.5 rounded-full text-[11px] font-bold flex items-center justify-center ${
+                      active ? "bg-brand-blue-dark text-white" : "bg-brand-yellow text-brand-blue-dark"
+                    }`}
+                  >
+                    {badge}
+                  </span>
+                )}
               </Link>
             );
           })}
@@ -73,16 +112,22 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-brand-blue-dark flex justify-around py-2 z-10">
           {NAV_ITEMS.map((item) => {
             const active = pathname === item.href;
+            const badge = badges[item.href] || 0;
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex flex-col items-center gap-1 text-xs px-3 py-1 rounded-lg ${
+                className={`relative flex flex-col items-center gap-1 text-xs px-3 py-1 rounded-lg ${
                   active ? "text-brand-yellow" : "text-white/70"
                 }`}
               >
                 <NavIcon src={item.icon} />
                 {item.label}
+                {badge > 0 && (
+                  <span className="absolute top-0 right-1 min-w-4 h-4 px-1 rounded-full bg-brand-yellow text-brand-blue-dark text-[10px] font-bold flex items-center justify-center">
+                    {badge}
+                  </span>
+                )}
               </Link>
             );
           })}

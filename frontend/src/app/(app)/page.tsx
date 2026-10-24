@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/auth";
 import { cancelMyBooking, getMyBookings, getPublicProfile, imageUrl, type MyBookingItem, type ProfileData } from "@/lib/api";
@@ -59,6 +59,111 @@ const yellowBtn =
 const outlineBtn =
   "inline-flex items-center justify-center gap-2 bg-white border border-gray-200 text-gray-700 font-medium text-sm rounded-xl px-5 py-2.5 hover:bg-gray-50 transition";
 
+const slideAspect = "aspect-[16/10] sm:aspect-[21/9]";
+
+function Carousel({
+  photos,
+  fallbackLetter,
+  onOpen,
+}: {
+  photos: { id: string; url: string }[];
+  fallbackLetter: string;
+  onOpen: (url: string) => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [index, setIndex] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const count = photos.length;
+
+  const goTo = useCallback(
+    (i: number) => {
+      const el = ref.current;
+      if (!el || count === 0) return;
+      const next = (i + count) % count;
+      el.scrollTo({ left: next * el.clientWidth, behavior: "smooth" });
+    },
+    [count]
+  );
+
+  // автолистание: каждые 5 секунд, пока на карусель не навели курсор или палец
+  useEffect(() => {
+    if (count < 2 || paused) return;
+    const t = setInterval(() => goTo(index + 1), 5000);
+    return () => clearInterval(t);
+  }, [count, paused, index, goTo]);
+
+  if (count === 0) {
+    return (
+      <div className={`${slideAspect} bg-gradient-to-br from-brand-blue to-brand-blue-dark flex items-center justify-center`}>
+        <span className="text-6xl font-bold text-white/30">{fallbackLetter}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="relative group"
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      onTouchStart={() => setPaused(true)}
+      onTouchEnd={() => setTimeout(() => setPaused(false), 4000)}
+    >
+      <div
+        ref={ref}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          setIndex(Math.round(el.scrollLeft / el.clientWidth));
+        }}
+        className="flex overflow-x-auto snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {photos.map((ph) => (
+          <button
+            key={ph.id}
+            type="button"
+            onClick={() => onOpen(imageUrl(ph.url) ?? "")}
+            className={`${slideAspect} w-full flex-shrink-0 snap-center cursor-zoom-in bg-gray-100`}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={imageUrl(ph.url) ?? ""} alt="" className="w-full h-full object-cover" draggable={false} />
+          </button>
+        ))}
+      </div>
+
+      {count > 1 && (
+        <>
+          <button
+            type="button"
+            aria-label="Предыдущее фото"
+            onClick={() => goTo(index - 1)}
+            className="hidden sm:flex absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white/85 text-gray-800 text-xl leading-none items-center justify-center shadow opacity-0 group-hover:opacity-100 transition-opacity"
+          >
+            ‹
+          </button>
+          <button
+            type="button"
+            aria-label="Следующее фото"
+            onClick={() => goTo(index + 1)}
+            className="hidden sm:flex absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white/85 text-gray-800 text-xl leading-none items-center justify-center shadow opacity-0 group-hover:opacity-100 transition-opacity"
+          >
+            ›
+          </button>
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 rounded-full bg-black/35 px-2.5 py-1.5">
+            {photos.map((ph, i) => (
+              <button
+                key={ph.id}
+                type="button"
+                aria-label={`Фото ${i + 1}`}
+                onClick={() => goTo(i)}
+                className={`h-1.5 rounded-full transition-all ${i === index ? "w-5 bg-white" : "w-1.5 bg-white/55"}`}
+              />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function Home() {
   const [data, setData] = useState<ProfileData | null>(null);
   const [failed, setFailed] = useState(false);
@@ -68,6 +173,7 @@ export default function Home() {
   const [cancelId, setCancelId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<string | null>(null);
+  const [openNewsId, setOpenNewsId] = useState<string | null>(null);
 
   useEffect(() => {
     getPublicProfile().then(setData).catch(() => setFailed(true));
@@ -88,6 +194,13 @@ export default function Home() {
     return () => window.removeEventListener("keydown", onKey);
   }, [lightbox]);
 
+  useEffect(() => {
+    if (!openNewsId) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpenNewsId(null);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [openNewsId]);
+
   async function handleCancel(id: string) {
     setActionError(null);
     const r = await cancelMyBooking(id);
@@ -103,6 +216,7 @@ export default function Home() {
   if (!data) return <p className="text-sm text-gray-400">Загрузка…</p>;
 
   const { profile, photos, news } = data;
+  const openNews = news.find((n) => n.id === openNewsId) ?? null;
   const bookHref = me ? "/booking" : "/login";
   const phoneHref = profile.phone ? `tel:${profile.phone.replace(/[^\d+]/g, "")}` : null;
   const hasContacts = !!(profile.address || profile.work_hours || profile.phone);
@@ -112,25 +226,24 @@ export default function Home() {
     <div className="rounded-3xl bg-gradient-to-b from-brand-blue/10 via-brand-blue/5 to-white p-4 sm:p-6 space-y-4">
       <h1 className="text-lg font-bold text-gray-900">Главная</h1>
 
-      {/* Шапка сервиса */}
+      {/* Карусель и визитка сервиса */}
       <section className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="relative h-36 sm:h-52 bg-gradient-to-r from-brand-blue to-brand-blue-dark">
-          {profile.cover_url && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={imageUrl(profile.cover_url) ?? ""} alt="" className="absolute inset-0 w-full h-full object-cover" />
-          )}
-        </div>
-        <div className="px-5 pb-5">
-          <div className="relative z-10 -mt-9 w-[72px] h-[72px] rounded-full border-4 border-white bg-brand-yellow overflow-hidden flex items-center justify-center text-brand-blue-dark font-bold text-2xl shadow">
-            {profile.logo_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={imageUrl(profile.logo_url) ?? ""} alt="" className="w-full h-full object-cover" />
-            ) : (
-              profile.name.slice(0, 1)
-            )}
+        <Carousel photos={photos} fallbackLetter={profile.name.slice(0, 1)} onOpen={setLightbox} />
+        <div className="p-5">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-full bg-brand-yellow overflow-hidden flex items-center justify-center text-brand-blue-dark font-bold text-xl flex-shrink-0 border border-gray-100">
+              {profile.logo_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={imageUrl(profile.logo_url) ?? ""} alt="" className="w-full h-full object-cover" />
+              ) : (
+                profile.name.slice(0, 1)
+              )}
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-xl font-semibold text-gray-900 leading-tight">{profile.name}</h2>
+              {profile.tagline && <p className="text-sm text-gray-500 mt-0.5">{profile.tagline}</p>}
+            </div>
           </div>
-          <h2 className="text-xl font-semibold text-gray-900 mt-3">{profile.name}</h2>
-          {profile.tagline && <p className="text-sm text-gray-500 mt-0.5">{profile.tagline}</p>}
           <div className="flex flex-wrap gap-2 mt-4">
             <Link href={bookHref} className={yellowBtn}>
               <Icon name="calendar-plus" />
@@ -189,7 +302,10 @@ export default function Home() {
                       {cancelId === b.id ? (
                         <>
                           <span className="text-xs text-gray-600">Отменить запись?</span>
-                          <button onClick={() => handleCancel(b.id)} className="text-xs font-medium text-red-600 bg-white border border-red-200 rounded-lg px-3 py-1.5 hover:bg-red-50">
+                          <button
+                            onClick={() => handleCancel(b.id)}
+                            className="text-xs font-medium text-red-600 bg-white border border-red-200 rounded-lg px-3 py-1.5 hover:bg-red-50"
+                          >
                             Да, отменить
                           </button>
                           <button onClick={() => setCancelId(null)} className="text-xs text-gray-500 px-2 py-1.5">
@@ -198,7 +314,10 @@ export default function Home() {
                         </>
                       ) : (
                         <>
-                          <Link href={`/booking/reschedule?id=${b.id}`} className="text-xs font-medium text-brand-blue bg-white border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50">
+                          <Link
+                            href={`/booking/reschedule?id=${b.id}`}
+                            className="text-xs font-medium text-brand-blue bg-white border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50"
+                          >
                             Перенести
                           </Link>
                           <button
@@ -221,6 +340,44 @@ export default function Home() {
             <p className="text-sm text-gray-400">Пока нет активных записей</p>
           )}
         </Card>
+      )}
+
+      {/* Новости и акции — сразу под записями, лентой карточек */}
+      {news.length > 0 && (
+        <section>
+          <h2 className="text-base font-semibold text-gray-900 mb-2 px-1">Новости и акции</h2>
+          <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-2 -mx-1 px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {news.map((n) => {
+              return (
+                <article
+                  key={n.id}
+                  onClick={() => setOpenNewsId(n.id)}
+                  className="snap-start flex-shrink-0 self-start w-[270px] sm:w-[320px] bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden cursor-pointer"
+                >
+                  {n.image_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={imageUrl(n.image_url) ?? ""} alt="" className="w-full h-36 object-cover" />
+                  ) : (
+                    <div className="h-1.5 bg-brand-yellow" />
+                  )}
+                  <div className="p-4">
+                    <p className="text-[11px] text-gray-400">{formatNewsDate(n.created_at)}</p>
+                    <h3 className="text-sm font-semibold text-gray-900 mt-0.5">{n.title}</h3>
+                    {n.body && (
+                      <p
+                        className="text-sm text-gray-600 mt-1 whitespace-pre-line"
+                        style={{ display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}
+                      >
+                        {n.body}
+                      </p>
+                    )}
+                    <span className="text-xs font-medium text-brand-blue mt-2 inline-block">Подробнее</span>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
       )}
 
       {/* О сервисе */}
@@ -274,42 +431,31 @@ export default function Home() {
         </Card>
       )}
 
-      {/* Фото */}
-      {photos.length > 0 && (
-        <Card title="Фото">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-            {photos.map((ph) => (
-              <button
-                key={ph.id}
-                type="button"
-                onClick={() => setLightbox(imageUrl(ph.url))}
-                className="aspect-[4/3] rounded-xl overflow-hidden bg-gray-100 cursor-zoom-in"
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={imageUrl(ph.url) ?? ""} alt="" className="w-full h-full object-cover hover:scale-105 transition-transform duration-300" />
-              </button>
-            ))}
+      {openNews && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center sm:p-4" onClick={() => setOpenNewsId(null)}>
+          <div
+            className="relative w-full sm:max-w-lg max-h-[90vh] overflow-y-auto bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              aria-label="Закрыть"
+              onClick={() => setOpenNewsId(null)}
+              className="absolute right-3 top-3 z-10 w-9 h-9 rounded-full bg-white/90 shadow flex items-center justify-center text-gray-700 text-xl leading-none"
+            >
+              ×
+            </button>
+            {openNews.image_url && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={imageUrl(openNews.image_url) ?? ""} alt="" className="w-full max-h-72 object-cover" />
+            )}
+            <div className="p-5 sm:p-6">
+              <p className="text-xs text-gray-400">{formatNewsDate(openNews.created_at)}</p>
+              <h3 className="text-lg font-bold text-gray-900 mt-1">{openNews.title}</h3>
+              {openNews.body && <p className="text-sm text-gray-700 mt-3 whitespace-pre-line leading-relaxed">{openNews.body}</p>}
+            </div>
           </div>
-        </Card>
-      )}
-
-      {/* Новости */}
-      {news.length > 0 && (
-        <Card title="Новости и акции">
-          <div className="space-y-4">
-            {news.map((n) => (
-              <article key={n.id} className="border-b border-gray-100 last:border-0 pb-4 last:pb-0">
-                {n.image_url && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={imageUrl(n.image_url) ?? ""} alt="" className="w-full max-h-64 object-cover rounded-xl mb-3" />
-                )}
-                <h3 className="text-sm font-semibold text-gray-900">{n.title}</h3>
-                <p className="text-xs text-gray-400 mb-1">{formatNewsDate(n.created_at)}</p>
-                {n.body && <p className="text-sm text-gray-700 whitespace-pre-line">{n.body}</p>}
-              </article>
-            ))}
-          </div>
-        </Card>
+        </div>
       )}
 
       {lightbox && (

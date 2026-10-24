@@ -479,7 +479,7 @@ export default function BookingPage() {
                 <textarea
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
-                  placeholder="Прошу заранее оценить стоимость работ и заказать запасные части"
+                  placeholder="Например, прошу заранее оценить стоимость работ и заказать запасные части"
                   rows={3}
                   className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm resize-none focus:outline-none focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/15 transition"
                 />

@@ -62,16 +62,19 @@ function formatDate(iso: string | null) {
 const inputCls =
   "w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20";
 const primaryBtn =
-  "inline-flex items-center justify-center gap-1.5 rounded-xl bg-brand-blue px-4 py-2 text-sm font-semibold text-white hover:bg-brand-blue-dark disabled:opacity-50 transition-colors";
+  "inline-flex items-center justify-center gap-1.5 rounded-xl bg-brand-yellow px-4 py-2 text-sm font-semibold text-brand-blue-dark hover:brightness-95 disabled:opacity-50 transition";
 const ghostBtn =
   "inline-flex items-center justify-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer";
 
-function Card({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
+function Card({ title, hint, action, children }: { title: string; hint?: string; action?: React.ReactNode; children: React.ReactNode }) {
   return (
     <section className="rounded-2xl bg-white border border-gray-100 shadow-sm p-4 sm:p-5">
-      <div className="mb-3">
-        <h2 className="text-base font-semibold text-gray-900">{title}</h2>
-        {hint && <p className="text-xs text-gray-500 mt-0.5">{hint}</p>}
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-gray-900">{title}</h2>
+          {hint && <p className="text-xs text-gray-500 mt-0.5">{hint}</p>}
+        </div>
+        {action}
       </div>
       {children}
     </section>
@@ -170,14 +173,14 @@ export default function NordHomePage() {
     }, "Сохранено");
   }
 
-  async function onSlotUpload(slot: "logo" | "cover", e: React.ChangeEvent<HTMLInputElement>) {
+  async function onLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = pickImage(e);
     if (!file) return;
-    await run(async () => setProfile(await uploadProfileImage(slot, file)), "Загружено");
+    await run(async () => setProfile(await uploadProfileImage("logo", file)), "Логотип загружен");
   }
 
-  async function onSlotDelete(slot: "logo" | "cover") {
-    await run(async () => setProfile(await deleteProfileImage(slot)));
+  async function onLogoDelete() {
+    await run(async () => setProfile(await deleteProfileImage("logo")));
   }
 
   async function onGalleryUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -201,7 +204,7 @@ export default function NordHomePage() {
   }
 
   async function onPhotoDelete(id: string) {
-    if (!window.confirm("Удалить фото из галереи?")) return;
+    if (!window.confirm("Удалить фото из карусели?")) return;
     await run(async () => {
       await deleteProfilePhoto(id);
       setData((d) => (d ? { ...d, photos: d.photos.filter((p) => p.id !== id) } : d));
@@ -266,111 +269,29 @@ export default function NordHomePage() {
 
   return (
     <div className="rounded-3xl bg-gradient-to-b from-brand-blue/10 via-brand-blue/5 to-white p-4 sm:p-6 space-y-4">
-      <div>
-        <h1 className="text-lg font-bold text-gray-900">Главная</h1>
-        <p className="text-xs text-gray-500 mt-0.5">Так ваш сервис увидят клиенты. Изменения сохраняются у вас сразу после загрузки картинок и по кнопке «Сохранить» для текста.</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-lg font-bold text-gray-900">Главная</h1>
+          <p className="text-xs text-gray-500 mt-0.5">Так ваш сервис увидят клиенты. Блоки идут в том же порядке, что и на странице.</p>
+        </div>
+        <a href="/" target="_blank" rel="noreferrer" className={`${ghostBtn} whitespace-nowrap`}>
+          Как у клиента
+        </a>
       </div>
 
-      {/* Обложка и логотип */}
-      <section className="rounded-2xl bg-white border border-gray-100 shadow-sm overflow-hidden">
-        <div className="relative h-40 sm:h-56 bg-gradient-to-r from-brand-blue/25 to-brand-blue/5">
-          {profile.cover_url && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={imageUrl(profile.cover_url) ?? ""} alt="" className="absolute inset-0 w-full h-full object-cover" />
-          )}
-          <div className="absolute right-3 top-3 flex gap-2">
-            <label className={ghostBtn}>
-              <Icon name="edit" />
-              {profile.cover_url ? "Сменить обложку" : "Добавить обложку"}
-              <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={busy} onChange={(e) => onSlotUpload("cover", e)} />
-            </label>
-            {profile.cover_url && (
-              <button type="button" className={ghostBtn} disabled={busy} onClick={() => onSlotDelete("cover")} aria-label="Убрать обложку">
-                <Icon name="trash" />
-              </button>
-            )}
-          </div>
-        </div>
-        <div className="px-4 sm:px-5 pb-4 flex items-end gap-4">
-          <div className="relative -mt-10 flex-shrink-0">
-            <div className="w-20 h-20 rounded-full border-4 border-white bg-brand-blue/10 overflow-hidden flex items-center justify-center text-brand-blue shadow">
-              {profile.logo_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={imageUrl(profile.logo_url) ?? ""} alt="" className="w-full h-full object-cover" />
-              ) : (
-                <Icon name="home" className="w-8 h-8" />
-              )}
-            </div>
-            <label className="absolute -right-1 -bottom-1 w-7 h-7 rounded-full bg-white border border-gray-200 shadow flex items-center justify-center text-gray-700 cursor-pointer hover:bg-gray-50" title="Сменить логотип">
-              <Icon name="edit" className="w-3.5 h-3.5" />
-              <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={busy} onChange={(e) => onSlotUpload("logo", e)} />
-            </label>
-          </div>
-          <div className="min-w-0 pt-3">
-            <div className="text-lg font-bold text-gray-900 truncate">{profile.name}</div>
-            {profile.tagline && <div className="text-sm text-gray-500 truncate">{profile.tagline}</div>}
-          </div>
-          {profile.logo_url && (
-            <button type="button" className="ml-auto text-xs text-gray-500 hover:text-red-600 pb-1" disabled={busy} onClick={() => onSlotDelete("logo")}>
-              Убрать логотип
-            </button>
-          )}
-        </div>
-      </section>
-
-      {/* О сервисе */}
-      <Card title="О сервисе" hint="Название, описание и контакты — то, что клиент видит в карточке сервиса.">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Название">
-            <input className={inputCls} value={form.name} onChange={set("name")} maxLength={120} />
-          </Field>
-          <Field label="Короткий слоган">
-            <input className={inputCls} value={form.tagline} onChange={set("tagline")} maxLength={200} placeholder="Например: шиномонтаж и ТО без очередей" />
-          </Field>
-          <div className="sm:col-span-2">
-            <Field label="Описание">
-              <textarea className={`${inputCls} min-h-28`} value={form.description} onChange={set("description")} maxLength={3000} placeholder="Чем занимаетесь, чем гордитесь, что важно знать клиенту" />
-            </Field>
-          </div>
-          <Field label="Телефон">
-            <input className={inputCls} value={form.phone} onChange={set("phone")} maxLength={40} placeholder="+7 900 000-00-00" />
-          </Field>
-          <Field label="Часы работы">
-            <input className={inputCls} value={form.work_hours} onChange={set("work_hours")} maxLength={200} placeholder="Пн–Сб 9:00–19:00" />
-          </Field>
-          <div className="sm:col-span-2">
-            <Field label="Адрес">
-              <input className={inputCls} value={form.address} onChange={set("address")} maxLength={200} placeholder="Город, улица, дом" />
-            </Field>
-          </div>
-          <Field label="Широта (для карты)">
-            <input className={inputCls} value={form.lat} onChange={set("lat")} inputMode="decimal" placeholder="55.7558" />
-          </Field>
-          <Field label="Долгота (для карты)">
-            <input className={inputCls} value={form.lng} onChange={set("lng")} inputMode="decimal" placeholder="37.6173" />
-          </Field>
-        </div>
-        <div className="mt-4 flex items-center gap-3">
-          <button type="button" className={primaryBtn} disabled={busy || !dirty} onClick={save}>
-            <Icon name="check" />
-            Сохранить
-          </button>
-          {mapLink && (
-            <a href={mapLink} target="_blank" rel="noreferrer" className="text-sm text-brand-blue hover:underline">
-              Проверить точку на карте
-            </a>
-          )}
-          {dirty && <span className="text-xs text-gray-400">Есть несохранённые изменения</span>}
-        </div>
-      </Card>
-
-      {/* Галерея */}
-      <Card title="Фото сервиса" hint="До 24 фото, JPG/PNG/WebP, каждое до 5 МБ.">
+      {/* 1. Карусель */}
+      <Card
+        title="Фото на главной"
+        hint="Клиент листает их каруселью сразу при входе. Первое фото самое заметное: поставьте лучшее. До 24 фото, JPG/PNG/WebP до 5 МБ."
+      >
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-          {photos.map((ph) => (
+          {photos.map((ph, i) => (
             <div key={ph.id} className="relative aspect-[4/3] rounded-xl overflow-hidden bg-gray-100">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={imageUrl(ph.url) ?? ""} alt="" className="w-full h-full object-cover" />
+              <span className="absolute left-1.5 top-1.5 rounded-full bg-black/55 text-white text-[11px] font-medium px-2 py-0.5">
+                {i === 0 ? "Первое" : i + 1}
+              </span>
               <button
                 type="button"
                 aria-label="Удалить фото"
@@ -390,7 +311,77 @@ export default function NordHomePage() {
         </div>
       </Card>
 
-      {/* Новости */}
+      {/* 2. Визитка */}
+      <Card title="Название и логотип">
+        <div className="flex flex-col sm:flex-row gap-5">
+          <div className="flex sm:flex-col items-center gap-3 flex-shrink-0">
+            <div className="w-20 h-20 rounded-full bg-brand-blue/10 overflow-hidden flex items-center justify-center text-brand-blue border border-gray-100">
+              {profile.logo_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={imageUrl(profile.logo_url) ?? ""} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <Icon name="home" className="w-8 h-8" />
+              )}
+            </div>
+            <div className="flex sm:flex-col items-center gap-2">
+              <label className={ghostBtn}>
+                <Icon name="edit" />
+                {profile.logo_url ? "Сменить" : "Загрузить"}
+                <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={busy} onChange={onLogoUpload} />
+              </label>
+              {profile.logo_url && (
+                <button type="button" className="text-xs text-gray-500 hover:text-red-600" disabled={busy} onClick={onLogoDelete}>
+                  Убрать
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="flex-1 grid gap-3">
+            <Field label="Название">
+              <input className={inputCls} value={form.name} onChange={set("name")} maxLength={120} />
+            </Field>
+            <Field label="Короткий слоган">
+              <input className={inputCls} value={form.tagline} onChange={set("tagline")} maxLength={200} placeholder="Например: шиномонтаж и ТО без очередей" />
+            </Field>
+          </div>
+        </div>
+      </Card>
+
+      {/* 3. О сервисе */}
+      <Card title="О сервисе" hint="Чем занимаетесь, чем гордитесь, что важно знать клиенту.">
+        <textarea className={`${inputCls} min-h-32`} value={form.description} onChange={set("description")} maxLength={3000} />
+        <p className="text-right text-[11px] text-gray-400 mt-1">{form.description.length} / 3000</p>
+      </Card>
+
+      {/* 4. Контакты */}
+      <Card title="Контакты и карта">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Телефон">
+            <input className={inputCls} value={form.phone} onChange={set("phone")} maxLength={40} placeholder="+7 900 000-00-00" />
+          </Field>
+          <Field label="Часы работы">
+            <input className={inputCls} value={form.work_hours} onChange={set("work_hours")} maxLength={200} placeholder="Пн–Сб 9:00–19:00" />
+          </Field>
+          <div className="sm:col-span-2">
+            <Field label="Адрес">
+              <input className={inputCls} value={form.address} onChange={set("address")} maxLength={200} placeholder="Город, улица, дом" />
+            </Field>
+          </div>
+          <Field label="Широта (для карты)">
+            <input className={inputCls} value={form.lat} onChange={set("lat")} inputMode="decimal" placeholder="55.7558" />
+          </Field>
+          <Field label="Долгота (для карты)">
+            <input className={inputCls} value={form.lng} onChange={set("lng")} inputMode="decimal" placeholder="37.6173" />
+          </Field>
+        </div>
+        {mapLink && (
+          <a href={mapLink} target="_blank" rel="noreferrer" className="inline-block mt-3 text-sm text-brand-blue hover:underline">
+            Проверить точку на карте
+          </a>
+        )}
+      </Card>
+
+      {/* 5. Новости */}
       <Card title="Новости и акции" hint="Короткие объявления: акции, режим работы в праздники, новое оборудование.">
         <div className="rounded-xl bg-gray-50 p-3 space-y-2">
           <input className={inputCls} value={newsTitle} onChange={(e) => setNewsTitle(e.target.value)} maxLength={200} placeholder="Заголовок" />
@@ -468,6 +459,22 @@ export default function NordHomePage() {
           ))}
         </div>
       </Card>
+
+      {/* Плавающая панель сохранения текста */}
+      {dirty && (
+        <div className="sticky bottom-4 z-30 flex items-center justify-between gap-3 rounded-2xl bg-white border border-gray-200 shadow-lg px-4 py-3">
+          <span className="text-sm text-gray-600">Есть несохранённые изменения</span>
+          <div className="flex items-center gap-2">
+            <button type="button" className={ghostBtn} disabled={busy} onClick={() => setForm(saved)}>
+              Отменить
+            </button>
+            <button type="button" className={primaryBtn} disabled={busy} onClick={save}>
+              <Icon name="check" />
+              Сохранить
+            </button>
+          </div>
+        </div>
+      )}
 
       {toast && (
         <div className={`fixed bottom-5 left-1/2 -translate-x-1/2 z-50 rounded-xl px-4 py-2.5 text-sm font-medium shadow-lg ${toast.error ? "bg-red-600 text-white" : "bg-gray-900 text-white"}`}>

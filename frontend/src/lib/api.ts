@@ -169,6 +169,15 @@ export async function getMyBooking(): Promise<MyBooking> {
   return res.json();
 }
 
+// Свободные окна на дату; excludeId: своя запись при переносе не считается занятой
+export async function getAvailabilityExcluding(date: string, excludeId: string | null): Promise<PostAvailability[]> {
+  const extra = excludeId ? `&exclude_booking_id=${encodeURIComponent(excludeId)}` : "";
+  const res = await fetch(`${API_URL}/availability/slots?target_date=${date}${extra}`, { cache: "no-store" });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.posts as PostAvailability[];
+}
+
 export type MyBookingItem = {
   id: string;
   date: string;

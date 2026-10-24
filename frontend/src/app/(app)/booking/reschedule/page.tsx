@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { getAvailability, getMyBookings, rescheduleMyBooking, type MyBookingItem, type PostAvailability } from "@/lib/api";
+import { getAvailabilityExcluding, getMyBookings, rescheduleMyBooking, type MyBookingItem, type PostAvailability } from "@/lib/api";
 import { DAYS_AHEAD, addDays, dayParts, fitsInfo, formatDuration, longDay, mskToday } from "@/lib/bookingUtils";
 
 const yellowBtn =
@@ -41,7 +41,7 @@ export default function ReschedulePage() {
       setItem(found);
       setState(found ? "ok" : "missing");
     });
-    Promise.all(dates.map((d) => getAvailability(d).catch(() => [] as PostAvailability[]))).then((res) => {
+    Promise.all(dates.map((d) => getAvailabilityExcluding(d, id).catch(() => [] as PostAvailability[]))).then((res) => {
       const map: Record<string, PostAvailability[]> = {};
       dates.forEach((d, i) => (map[d] = res[i]));
       setAvail(map);

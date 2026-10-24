@@ -1466,7 +1466,7 @@ async def _client_with_booking(client, db_session, phone, start="10:00", duratio
     headers = {"Authorization": f"Bearer {token}"}
     r = await client.post(
         "/bookings",
-        json={"date": str(day), "start_time": start, "service_ids": [str(service.id)]},
+        json={"date": str(day), "start_time": start, "service_ids": [str(service.id)], "post_id": str(post.id)},
         headers=headers,
     )
     assert r.status_code == 200, r.text
@@ -1586,3 +1586,20 @@ async def test_car_history_lists_finished_confirmed_bookings(client, db_session)
     other = await register_and_login(client, "+79165557822")
     r_other = await client.get("/bookings/history", headers={"Authorization": f"Bearer {other}"})
     assert r_other.json() == []
+
+
+@pytest.mark.asyncio
+async def test_slots_can_exclude_own_booking(client, db_session):
+    headers, bid, post, day = await _client_with_booking(client, db_session, "+79165557831", start="10:00", duration=60)
+
+    def free_map(resp):
+        col = [p for p in resp.json()["posts"] if p["post_id"] == str(post.id)][0]
+        return {s["time"]: s["free"] for s in col["slots"]}
+
+    busy = free_map(await client.get("/availability/slots", params={"target_date": str(day)}))
+    assert busy["10:00"] is False and busy["10:30"] is False
+
+    own = free_map(
+        await client.get("/availability/slots", params={"target_date": str(day), "exclude_booking_id": bid})
+    )
+    assert own["10:00"] is True and own["10:30"] is True

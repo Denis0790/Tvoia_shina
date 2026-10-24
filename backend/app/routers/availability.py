@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, date as date_type
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
@@ -22,7 +23,13 @@ def minutes_to_time(m: int) -> str:
 
 
 @router.get("/slots")
-async def get_slots(target_date: date_type = Query(...), db: AsyncSession = Depends(get_db)):
+async def get_slots(
+    target_date: date_type = Query(...),
+    exclude_booking_id: uuid.UUID | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Свободные окна. exclude_booking_id: запись (вместе с продолжением) не занимает время —
+    нужно, когда клиент переносит свою запись."""
     # 1. Все посты — один запрос
     posts_result = await db.execute(select(Post))
     posts = posts_result.scalars().all()
@@ -33,6 +40,16 @@ async def get_slots(target_date: date_type = Query(...), db: AsyncSession = Depe
     )
     exceptions_by_post = {e.post_id: e for e in exceptions_result.scalars().all()}
 
+    exclude_ids: set = set()
+    if exclude_booking_id is not None:
+        own = (await db.execute(select(Booking).where(Booking.id == exclude_booking_id))).scalar_one_or_none()
+        if own is not None:
+            if own.group_id is not None:
+                rows = await db.execute(select(Booking.id).where(Booking.group_id == own.group_id))
+                exclude_ids = set(rows.scalars().all())
+            else:
+                exclude_ids = {own.id}
+
     # 3. Все брони на эту дату сразу для всех постов — тоже один запрос
     bookings_result = await db.execute(
         select(Booking).where(
@@ -42,6 +59,8 @@ async def get_slots(target_date: date_type = Query(...), db: AsyncSession = Depe
     )
     bookings_by_post: dict = {}
     for b in bookings_result.scalars().all():
+        if b.id in exclude_ids:
+            continue
         bookings_by_post.setdefault(b.post_id, []).append(b)
 
     weekday_index = target_date.weekday()  # 0 = Пн

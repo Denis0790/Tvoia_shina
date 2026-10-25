@@ -268,7 +268,7 @@ export default function NordHomePage() {
     setForm((f) => (f ? { ...f, [k]: e.target.value } : f));
 
   return (
-    <div className="rounded-3xl bg-gradient-to-b from-brand-blue/10 via-brand-blue/5 to-white p-4 sm:p-6 space-y-4">
+    <div className="-m-6 md:-m-10 p-6 md:p-10 md:rounded-[12px] bg-[#e8eaf0] min-h-[100dvh] md:min-h-[calc(100dvh-2rem)] space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-lg font-bold text-gray-900">Главная</h1>

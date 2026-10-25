@@ -502,7 +502,7 @@ export default function PostsPage() {
   if (loading) return <p className="text-sm text-gray-400">Загрузка…</p>;
 
   return (
-    <div className="rounded-3xl bg-gradient-to-b from-brand-blue/10 via-brand-blue/5 to-white p-4 sm:p-6">
+    <div className="-m-6 md:-m-10 p-6 md:p-10 md:rounded-[12px] bg-[#e8eaf0] min-h-[100dvh] md:min-h-[calc(100dvh-2rem)]">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-semibold text-gray-900">Посты</h1>
         <button

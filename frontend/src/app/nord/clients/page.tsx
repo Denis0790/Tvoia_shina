@@ -985,7 +985,7 @@ function ClientsPageInner() {
   ];
 
   return (
-    <div className="rounded-3xl bg-gradient-to-b from-brand-blue/10 via-brand-blue/5 to-white p-4 sm:p-6">
+    <div className="-m-6 md:-m-10 p-6 md:p-10 md:rounded-[12px] bg-[#e8eaf0] min-h-[100dvh] md:min-h-[calc(100dvh-2rem)]">
       <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
         <div>
           <h1 className="text-xl font-semibold text-gray-900">Клиенты</h1>

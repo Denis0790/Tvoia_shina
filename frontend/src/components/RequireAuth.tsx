@@ -18,7 +18,7 @@ export default function RequireAuth({ title, children }: { title: string; childr
   if (state === "ok") return <>{children}</>;
 
   return (
-    <div className="rounded-3xl bg-gradient-to-b from-brand-blue/10 via-brand-blue/5 to-white p-4 sm:p-6 space-y-4">
+    <div className="-m-6 md:-m-10 p-6 md:p-10 md:rounded-[12px] bg-[#e8eaf0] min-h-[calc(100dvh-4rem)] md:min-h-[calc(100dvh-2rem)] space-y-4">
       <h1 className="text-lg font-bold text-gray-900">{title}</h1>
       <section className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 text-center">
         <div className="mx-auto w-12 h-12 rounded-full bg-brand-yellow text-brand-blue-dark font-bold text-xl flex items-center justify-center">

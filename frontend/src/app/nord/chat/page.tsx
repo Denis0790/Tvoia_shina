@@ -16,6 +16,7 @@ function ChatInner() {
   const [q, setQ] = useState("");
   const [active, setActive] = useState<ConversationItem | null>(null);
   const [loading, setLoading] = useState(true);
+  const [openError, setOpenError] = useState<string | null>(null);
   const qRef = useRef("");
   qRef.current = q;
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -45,15 +46,20 @@ function ChatInner() {
 
   useEffect(() => {
     if (!clientParam) return;
+    setOpenError(null);
     managerApiFetch(`/chat/conversations/with/${clientParam}`, { method: "POST" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((c: ConversationItem | null) => {
-        if (c) setActive(c);
-      });
+      .then(async (r) => {
+        if (!r.ok) {
+          setOpenError(`Не удалось открыть диалог (код ${r.status}, клиент ${clientParam})`);
+          return;
+        }
+        setActive((await r.json()) as ConversationItem);
+      })
+      .catch(() => setOpenError("Не удалось открыть диалог: нет связи с сервером"));
   }, [clientParam]);
 
   return (
-    <div className="rounded-3xl bg-gradient-to-b from-brand-blue/10 via-brand-blue/5 to-white p-4 sm:p-6 flex flex-col gap-4 h-[calc(100dvh-3rem)] md:h-[calc(100dvh-7rem)]">
+    <div className="-m-6 md:-m-10 p-6 md:p-10 md:rounded-[12px] bg-[#e8eaf0] h-[100dvh] md:h-[calc(100dvh-2rem)] flex flex-col gap-4">
       <div>
         <h1 className="text-lg font-bold text-gray-900">Чат</h1>
         <p className="text-xs text-gray-500 mt-0.5">Переписка с клиентами</p>
@@ -144,7 +150,7 @@ function ChatInner() {
             />
           ) : (
             <div className="flex-1 flex items-center justify-center bg-white rounded-2xl border border-gray-100 shadow-sm text-sm text-gray-400">
-              Выберите диалог слева
+              {openError ?? "Выберите диалог слева"}
             </div>
           )}
         </div>

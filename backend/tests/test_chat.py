@@ -201,3 +201,30 @@ async def test_new_message_is_published_for_client_and_managers(client, db_sessi
     finally:
         await client_sub.aclose()
         await manager_sub.aclose()
+
+
+@pytest.mark.asyncio
+async def test_reactions(client, db_session):
+    ch, _ = await _client(client, "+79165559071")
+    mh = await _manager(client, db_session, "+79165559072")
+    other, _ = await _client(client, "+79165559073")
+    conv_id = await _conv(client, ch)
+    msg = (await _send(client, ch, conv_id, "Привет")).json()
+    url = f"/chat/messages/{msg['id']}/reaction"
+
+    r = await client.put(url, json={"emoji": "👍"}, headers=mh)
+    assert r.status_code == 200
+    assert [(x["emoji"], x["role"]) for x in r.json()["reactions"]] == [("👍", "manager")]
+
+    await client.put(url, json={"emoji": "❤"}, headers=ch)  # без селектора варианта — тоже ❤️
+    r = await client.put(url, json={"emoji": "👍"}, headers=ch)  # заменила ❤️ на 👍
+    assert sorted(x["emoji"] for x in r.json()["reactions"]) == ["👍", "👍"]
+
+    r = await client.put(url, json={"emoji": "👍"}, headers=ch)  # повтор снимает
+    assert [x["role"] for x in r.json()["reactions"]] == ["manager"]
+
+    assert (await client.put(url, json={"emoji": "🤡"}, headers=ch)).status_code == 400
+    assert (await client.put(url, json={"emoji": "👍"}, headers=other)).status_code == 404
+
+    history = (await client.get(f"/chat/conversations/{conv_id}/messages", headers=ch)).json()["messages"]
+    assert [x["emoji"] for x in history[0]["reactions"]] == ["👍"]

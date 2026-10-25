@@ -272,18 +272,23 @@ export async function confirmBooking(
   id: string,
   postId: string,
   durationMinutes?: number,
-  startTime?: string
+  startTime?: string,
+  comment?: string
 ) {
   const res = await managerApiFetch(`/bookings/${id}/confirm`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ post_id: postId, duration_minutes: durationMinutes, start_time: startTime }),
+    body: JSON.stringify({ post_id: postId, duration_minutes: durationMinutes, start_time: startTime, comment: comment ?? null }),
   });
   return res.ok;
 }
 
-export async function declineBooking(id: string) {
-  const res = await managerApiFetch(`/bookings/${id}/decline`, { method: "POST" });
+export async function declineBooking(id: string, comment?: string) {
+  const res = await managerApiFetch(`/bookings/${id}/decline`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ comment: comment ?? null }),
+  });
   return res.ok;
 }
 
@@ -351,8 +356,12 @@ export async function searchClientsForBooking(digits: string): Promise<BookingCl
   return res.json();
 }
 
-export async function cancelBooking(id: string) {
-  const res = await managerApiFetch(`/bookings/${id}/cancel`, { method: "POST" });
+export async function cancelBooking(id: string, comment?: string) {
+  const res = await managerApiFetch(`/bookings/${id}/cancel`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ comment: comment ?? null }),
+  });
   return res.ok;
 }
 
@@ -773,5 +782,11 @@ export async function orgLogin(login: string, password: string): Promise<{ acces
     } catch {}
     throw { status: res.status, detail };
   }
+  return res.json();
+}
+
+export async function getPendingDays(start: string, days = 7): Promise<Record<string, number>> {
+  const res = await managerApiFetch(`/bookings/pending-days?start=${start}&days=${days}`);
+  if (!res.ok) return {};
   return res.json();
 }

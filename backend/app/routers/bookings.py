@@ -96,6 +96,7 @@ async def create_booking(
         await db.rollback()
         raise HTTPException(status_code=409, detail="Этот слот уже занят")
 
+    await _notify_booking(db, "new", booking_id=rows[0].id, actor="client")
     return {"id": str(rows[0].id), "status": "pending", "duration_minutes": total_minutes}
 
 
@@ -376,10 +377,84 @@ async def create_manual_booking(
     return {"id": str(rows[0].id), "user_id": str(user.id), "created_user": created_user, "segments": len(rows)}
 
 
+_RU_MONTHS = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"]
+_RU_WEEKDAYS = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"]
+
+
+def _fmt_when(b: Booking) -> str:
+    d = b.date
+    return f"{d.day} {_RU_MONTHS[d.month - 1]} ({_RU_WEEKDAYS[d.weekday()]}), {str(b.start_time)[:5]}"
+
+
+class BookingNote(BaseModel):
+    comment: str | None = None
+
+
+async def _notify_booking(db: AsyncSession, kind: str, *, booking_id, actor: str, actor_user=None, note: str | None = None):
+    """Дублирует событие по записи карточкой в чат клиента. Сбой чата не ломает саму запись."""
+    try:
+        from app.models import booking_services
+        from app.routers.chat import post_booking_message
+
+        found = (
+            await db.execute(select(Booking).where(Booking.id == booking_id).execution_options(populate_existing=True))
+        ).scalar_one_or_none()
+        if found is None:
+            return
+        head = found
+        if found.group_id is not None:
+            first = (
+                await db.execute(
+                    select(Booking).where(Booking.group_id == found.group_id, Booking.part == 0).execution_options(populate_existing=True)
+                )
+            ).scalars().first()
+            head = first or found
+        client = (await db.execute(select(User).where(User.id == head.user_id))).scalar_one_or_none()
+        if client is None:
+            return
+        names = (
+            await db.execute(
+                select(Service.name)
+                .join(booking_services, booking_services.c.service_id == Service.id)
+                .where(booking_services.c.booking_id == head.id)
+            )
+        ).scalars().all()
+        work = ", ".join(x for x in (", ".join(names), head.services_text) if x)
+        car_text = None
+        if head.car_id is not None:
+            car = (await db.execute(select(Car).where(Car.id == head.car_id))).scalar_one_or_none()
+            if car is not None:
+                car_text = " · ".join(x for x in (" ".join(y for y in (car.make, car.model) if y), car.plate) if x)
+        titles = {
+            "new": "Новая запись — ждёт подтверждения",
+            "confirmed": "Запись подтверждена",
+            "declined": "Заявка отклонена",
+            "cancelled": "Запись отменена",
+            "moved": "Запись перенесена",
+            "cancelled_by_client": "Запись отменена клиентом",
+            "moved_by_client": "Запись перенесена клиентом — ждёт подтверждения",
+        }
+        lines = [f"Когда: {_fmt_when(head)}"]
+        if work:
+            lines.append(f"Работы: {work}")
+        if car_text:
+            lines.append(f"Авто: {car_text}")
+        if kind == "new" and head.comment:
+            lines.append(f"Комментарий: {head.comment}")
+        if note:
+            lines.append(f"Комментарий сервиса: {note}")
+        await post_booking_message(db, client, actor, actor_user, titles[kind], lines)
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception("не удалось отправить карточку записи в чат")
+
+
 class BookingConfirm(BaseModel):
     post_id: uuid.UUID
     duration_minutes: int | None = None
     start_time: str | None = None
+    comment: str | None = None
 
 
 @router.post("/{booking_id}/confirm")
@@ -398,6 +473,10 @@ async def confirm_booking(booking_id: uuid.UUID, payload: BookingConfirm, manage
     await _move_group(
         db, booking, payload.post_id, booking.date, start_time, statuses=("confirmed",),
         total=payload.duration_minutes, new_status="confirmed",
+    )
+    await _notify_booking(
+        db, "confirmed", booking_id=booking_id, actor="manager", actor_user=manager,
+        note=(payload.comment or "").strip()[:500] or None,
     )
     return {"ok": True}
 
@@ -420,6 +499,7 @@ async def reschedule_booking(booking_id: uuid.UUID, payload: BookingReschedule, 
 
     target_date = payload.date if payload.date is not None else booking.date
     await _move_group(db, booking, payload.post_id, target_date, payload.start_time, statuses=("confirmed",))
+    await _notify_booking(db, "moved", booking_id=booking_id, actor="manager", actor_user=manager)
     return {"ok": True}
 
 
@@ -455,7 +535,12 @@ async def _group_clause(db: AsyncSession, booking_id: uuid.UUID):
 
 
 @router.post("/{booking_id}/cancel")
-async def cancel_confirmed_booking(booking_id: uuid.UUID, manager: User = Depends(require_manager), db: AsyncSession = Depends(get_db)):
+async def cancel_confirmed_booking(
+    booking_id: uuid.UUID,
+    payload: BookingNote | None = None,
+    manager: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+):
     """Отмена уже подтверждённой записи менеджером (в отличие от /decline,
     которая отклоняет ещё не подтверждённую заявку). Отменяется вся группа."""
     clause = await _group_clause(db, booking_id)
@@ -469,11 +554,20 @@ async def cancel_confirmed_booking(booking_id: uuid.UUID, manager: User = Depend
     if result.rowcount == 0:
         raise HTTPException(status_code=409, detail="Запись не найдена или уже не подтверждена")
 
+    await _notify_booking(
+        db, "cancelled", booking_id=booking_id, actor="manager", actor_user=manager,
+        note=((payload.comment if payload else "") or "").strip()[:500] or None,
+    )
     return {"ok": True}
 
 
 @router.post("/{booking_id}/decline")
-async def decline_booking(booking_id: uuid.UUID, manager: User = Depends(require_manager), db: AsyncSession = Depends(get_db)):
+async def decline_booking(
+    booking_id: uuid.UUID,
+    payload: BookingNote | None = None,
+    manager: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+):
     clause = await _group_clause(db, booking_id)
     if clause is None:
         raise HTTPException(status_code=409, detail="Запись уже обработана другим менеджером")
@@ -485,6 +579,10 @@ async def decline_booking(booking_id: uuid.UUID, manager: User = Depends(require
     if result.rowcount == 0:
         raise HTTPException(status_code=409, detail="Запись уже обработана другим менеджером")
 
+    await _notify_booking(
+        db, "declined", booking_id=booking_id, actor="manager", actor_user=manager,
+        note=((payload.comment if payload else "") or "").strip()[:500] or None,
+    )
     return {"ok": True}
 
 
@@ -610,6 +708,7 @@ async def cancel_my_booking(booking_id: uuid.UUID, user: User = Depends(get_curr
     clause = Booking.group_id == booking.group_id if booking.group_id is not None else Booking.id == booking.id
     await db.execute(update(Booking).where(clause, Booking.status.in_(["pending", "confirmed"])).values(status="cancelled"))
     await db.commit()
+    await _notify_booking(db, "cancelled_by_client", booking_id=booking_id, actor="client")
     return {"ok": True}
 
 
@@ -638,6 +737,7 @@ async def reschedule_my_booking(
                 db, booking, pid, payload.date, payload.start_time,
                 statuses=("pending", "confirmed"), new_status="pending",
             )
+            await _notify_booking(db, "moved_by_client", booking_id=booking_id, actor="client")
             return {"ok": True}
         except HTTPException as e:
             last_error = e
@@ -1058,6 +1158,28 @@ def _car_dict(car: Car | None):
     if car is None:
         return None
     return {"make": car.make, "model": car.model, "vin": car.vin, "plate": car.plate}
+
+
+@router.get("/pending-days")
+async def pending_days(
+    start: date_type, days: int = 14, manager: User = Depends(require_manager), db: AsyncSession = Depends(get_db)
+):
+    """Сколько заявок ждут подтверждения по дням — для пометок в календаре менеджера."""
+    import datetime as _dtm
+
+    days = max(1, min(days, 62))
+    begin = _dtm.datetime.combine(start, _dtm.time.min)
+    end = begin + _dtm.timedelta(days=days)
+    rows = await db.execute(
+        select(Booking.date).where(
+            Booking.status == "pending", Booking.part == 0, Booking.date >= begin, Booking.date < end
+        )
+    )
+    out: dict[str, int] = {}
+    for (d,) in rows.all():
+        key = str(d)[:10]
+        out[key] = out.get(key, 0) + 1
+    return out
 
 
 @router.get("/calendar")

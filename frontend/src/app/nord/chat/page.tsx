@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { managerApiFetch } from "@/lib/managerAuth";
 import { managerSocket } from "@/lib/chatSocket";
@@ -10,7 +11,7 @@ import Ico from "@/components/chat/Ico";
 
 function ChatInner() {
   const params = useSearchParams();
-  const clientParam = params.get("client");
+  const clientParam = params.get("client") ?? params.get("user");
   const [items, setItems] = useState<ConversationItem[]>([]);
   const [q, setQ] = useState("");
   const [active, setActive] = useState<ConversationItem | null>(null);
@@ -57,7 +58,7 @@ function ChatInner() {
         <h1 className="text-lg font-bold text-gray-900">Чат</h1>
         <p className="text-xs text-gray-500 mt-0.5">Переписка с клиентами</p>
       </div>
-      <div className="flex-1 min-h-0 grid md:grid-cols-[320px_1fr] gap-4">
+      <div className="flex-1 min-h-0 grid md:grid-cols-[320px_minmax(0,1fr)] gap-4">
         <div className={`${active ? "hidden md:flex" : "flex"} flex-col min-h-0 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden`}>
           <div className="p-3 border-b border-gray-100">
             <div className="flex items-center gap-2 rounded-xl bg-gray-100 px-3">
@@ -109,7 +110,7 @@ function ChatInner() {
           </div>
         </div>
 
-        <div className={`${active ? "flex" : "hidden md:flex"} min-h-0`}>
+        <div className={`${active ? "flex" : "hidden md:flex"} min-h-0 min-w-0`}>
           {active ? (
             <ChatThread
               key={active.id}
@@ -120,16 +121,25 @@ function ChatInner() {
               title={active.client.name}
               subtitle={active.client.phone || active.client.login || (active.client.is_org ? "Организация" : "")}
               onBack={() => setActive(null)}
+              titleHref={`/nord/clients?expand=${active.client.id}`}
               emptyText="Напишите клиенту первым"
               action={
-                active.client.phone ? (
+                <div className="flex items-center gap-2">
+                  <Link
+                    href={`/nord/clients?expand=${active.client.id}`}
+                    className="text-xs font-medium text-brand-blue border border-brand-blue/30 rounded-xl px-3 py-2 hover:bg-brand-blue/5 whitespace-nowrap"
+                  >
+                    Карточка
+                  </Link>
+                  {active.client.phone ? (
                   <a
                     href={`tel:${active.client.phone.replace(/[^\d+]/g, "")}`}
                     className="text-xs font-medium text-brand-blue border border-brand-blue/30 rounded-xl px-3 py-2 hover:bg-brand-blue/5 whitespace-nowrap"
                   >
                     Позвонить
                   </a>
-                ) : null
+                  ) : null}
+                </div>
               }
             />
           ) : (

@@ -1,5 +1,7 @@
 "use client";
 
+import { getPendingDays } from "@/lib/api";
+
 import { useMemo, useState, useEffect, useLayoutEffect, useRef } from "react";
 import Link from "next/link";
 import {
@@ -871,6 +873,63 @@ function NewBookingModal({
   );
 }
 
+function NoteDialog({
+  title,
+  placeholder,
+  confirmLabel,
+  danger,
+  onSubmit,
+  onClose,
+}: {
+  title: string;
+  placeholder: string;
+  confirmLabel: string;
+  danger?: boolean;
+  onSubmit: (note: string) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
+        <h2 className="text-base font-semibold text-gray-900">{title}</h2>
+        <p className="text-xs text-gray-500 mt-0.5">Комментарий клиенту — необязательно. Он придёт сообщением в чат.</p>
+        <textarea
+          autoFocus
+          value={note}
+          maxLength={500}
+          rows={3}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder={placeholder}
+          className="mt-3 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:border-brand-blue"
+        />
+        <div className="mt-4 flex items-center gap-2">
+          <button
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              await onSubmit(note);
+              setBusy(false);
+            }}
+            className={`flex-1 text-white text-sm font-medium rounded-lg py-2.5 active:scale-[0.98] disabled:opacity-40 transition cursor-pointer ${
+              danger ? "bg-red-600 hover:bg-red-600/90" : "bg-brand-blue hover:bg-brand-blue/90"
+            }`}
+          >
+            {busy ? "Отправляю…" : confirmLabel}
+          </button>
+          <button
+            onClick={onClose}
+            className="text-sm text-gray-500 px-4 py-2.5 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+          >
+            Назад
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function CalendarPage() {
   const [date, setDate] = useState(() => new Date());
   const [posts, setPosts] = useState<CalendarPost[]>([]);
@@ -956,6 +1015,26 @@ export default function CalendarPage() {
   }, [date]);
 
   const mondayISO = toISODate(monday);
+
+  // сколько заявок ждут подтверждения по дням недели — пометки на датах
+  const [pendingDays, setPendingDays] = useState<Record<string, number>>({});
+  useEffect(() => {
+    let cancelled = false;
+    const run = () =>
+      getPendingDays(mondayISO, 7)
+        .then((d) => {
+          if (!cancelled) setPendingDays(d);
+        })
+        .catch(() => {});
+    run();
+    const t = setInterval(() => {
+      if (document.visibilityState === "visible") run();
+    }, 15000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, [mondayISO, posts]);
 
   // Суббота и воскресенье показываются только если в этот день работает хотя бы один пост
   const [weekend, setWeekend] = useState<{ monday: string; sat: boolean; sun: boolean } | null>(null);
@@ -1106,20 +1185,42 @@ export default function CalendarPage() {
     setNewBooking({ postId, postName, time });
   }
 
-  async function handleConfirmInPlace(booking: CalendarBooking, duration: number) {
-    const ok = await confirmBooking(booking.id, booking.post_id, duration, booking.start_time);
-    if (ok) load();
-    else alert("Не удалось подтвердить — похоже, время уже занято");
+  // подтверждение, отклонение и отмена идут с необязательным комментарием: клиент получит его сообщением в чат
+  const [noteAsk, setNoteAsk] = useState<{ kind: "confirm" | "decline" | "cancel"; booking: CalendarBooking; duration?: number } | null>(null);
+
+  function findBooking(id: string): CalendarBooking | null {
+    return posts.flatMap((p) => p.slots).find((s) => s.booking?.id === id)?.booking ?? null;
   }
 
-  async function handleDeclinePending(id: string) {
-    const ok = await declineBooking(id);
-    if (ok) load();
+  function handleConfirmInPlace(booking: CalendarBooking, duration: number) {
+    setNoteAsk({ kind: "confirm", booking, duration });
   }
 
-  async function handleCancelConfirmed(id: string) {
-    const ok = await cancelBooking(id);
-    if (ok) load();
+  function handleDeclinePending(id: string) {
+    const b = findBooking(id);
+    if (b) setNoteAsk({ kind: "decline", booking: b });
+  }
+
+  function handleCancelConfirmed(id: string) {
+    const b = findBooking(id);
+    if (b) setNoteAsk({ kind: "cancel", booking: b });
+  }
+
+  async function runNote(note: string) {
+    const a = noteAsk;
+    if (!a) return;
+    const text = note.trim() || undefined;
+    let ok = false;
+    if (a.kind === "confirm") ok = await confirmBooking(a.booking.id, a.booking.post_id, a.duration, a.booking.start_time, text);
+    else if (a.kind === "decline") ok = await declineBooking(a.booking.id, text);
+    else ok = await cancelBooking(a.booking.id, text);
+    if (ok) {
+      setNoteAsk(null);
+      setToast(a.kind === "confirm" ? "Запись подтверждена" : a.kind === "decline" ? "Заявка отклонена" : "Запись отменена");
+      load();
+    } else {
+      alert(a.kind === "confirm" ? "Не удалось подтвердить — похоже, время уже занято" : "Не удалось выполнить действие");
+    }
   }
 
   return (
@@ -1144,7 +1245,7 @@ export default function CalendarPage() {
               <button
                 key={iso}
                 onClick={() => setDate(d)}
-                className={`flex flex-col items-center py-3 rounded-xl font-medium transition-colors cursor-pointer min-w-0 ${
+                className={`relative flex flex-col items-center py-3 rounded-xl font-medium transition-colors cursor-pointer min-w-0 ${
                   isSelected
                     ? "bg-brand-blue text-white shadow-sm"
                     : isToday
@@ -1158,6 +1259,14 @@ export default function CalendarPage() {
                 <span className="text-[11px] opacity-70 capitalize max-w-full truncate px-1">
                   {d.toLocaleDateString("ru-RU", { weekday: "long" })}
                 </span>
+                {(pendingDays[iso] ?? 0) > 0 && (
+                  <span
+                    title="Ждут подтверждения"
+                    className="absolute -top-1.5 -right-1.5 min-w-5 h-5 px-1 rounded-full bg-brand-yellow text-brand-blue-dark text-[11px] font-bold flex items-center justify-center shadow-sm"
+                  >
+                    {pendingDays[iso]}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -1438,6 +1547,21 @@ export default function CalendarPage() {
             load();
             return null;
           }}
+        />
+      )}
+
+      {noteAsk && (
+        <NoteDialog
+          title={noteAsk.kind === "confirm" ? "Подтвердить запись" : noteAsk.kind === "decline" ? "Отклонить заявку" : "Отменить запись"}
+          placeholder={
+            noteAsk.kind === "confirm"
+              ? "Например: привезите, пожалуйста, ключи от секреток"
+              : "Например: в это время мы закрыты, давайте подберём другое"
+          }
+          confirmLabel={noteAsk.kind === "confirm" ? "Подтвердить" : noteAsk.kind === "decline" ? "Отклонить" : "Отменить запись"}
+          danger={noteAsk.kind !== "confirm"}
+          onSubmit={runNote}
+          onClose={() => setNoteAsk(null)}
         />
       )}
 

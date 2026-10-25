@@ -11,15 +11,43 @@ import {
   formatTime,
   getMessages,
   newId,
+  shortDay,
   upsertMessage,
 } from "@/lib/chat";
 import type { ChatEvent, ChatSocket } from "@/lib/chatSocket";
 import EmojiPicker from "./EmojiPicker";
+import Link from "next/link";
 import Ico from "./Ico";
 import Emoji from "./Emoji";
 import { isEmojiOnly, splitEmoji } from "@/lib/emojiData";
 
 const EDIT_MS = 24 * 60 * 60 * 1000;
+const QUICK_REACTIONS = ["👍", "👎", "❤️", "🔥", "😂", "😮", "😢", "🙏"];
+
+function BookingCard({ text }: { text: string }) {
+  const [title, ...rest] = text.split("\n");
+  return (
+    <div className="min-w-[13rem]">
+      <div className="flex items-center gap-2 font-semibold text-gray-900">
+        <span className="w-1.5 h-4 rounded-full bg-brand-yellow flex-shrink-0" />
+        {title}
+      </div>
+      <div className="mt-1.5 space-y-0.5 text-[13px] text-gray-900">
+        {rest.map((l, i) => {
+          const k = l.indexOf(": ");
+          return k > 0 ? (
+            <div key={i}>
+              <span className="text-gray-500">{l.slice(0, k)}: </span>
+              <span className="break-words">{l.slice(k + 2)}</span>
+            </div>
+          ) : (
+            <div key={i}>{l}</div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function MessageText({ text }: { text: string }) {
   return (
@@ -41,11 +69,12 @@ type Props = {
   title: string;
   subtitle?: string;
   onBack?: () => void;
+  titleHref?: string;
   action?: React.ReactNode;
   emptyText?: string;
 };
 
-export default function ChatThread({ convId, me, fetcher, socket, title, subtitle, onBack, action, emptyText }: Props) {
+export default function ChatThread({ convId, me, fetcher, socket, title, subtitle, onBack, titleHref, action, emptyText }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -60,6 +89,8 @@ export default function ChatThread({ convId, me, fetcher, socket, title, subtitl
   const [newBelow, setNewBelow] = useState(0);
   const [showDown, setShowDown] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [upcoming, setUpcoming] = useState<{ id: string; date: string; start_time: string; status: string }[]>([]);
+  const [meId, setMeId] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -126,17 +157,50 @@ export default function ChatThread({ convId, me, fetcher, socket, title, subtitl
     if (atBottomRef.current) markRead();
   }, [convId, fetcher, markRead]);
 
+  // ближайшие записи клиента — напоминание над перепиской
+  const loadUpcoming = useCallback(() => {
+    fetcher(`/chat/conversations/${convId}/bookings`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d) => setUpcoming(d))
+      .catch(() => {});
+  }, [convId, fetcher]);
+
+  useEffect(() => {
+    setUpcoming([]);
+    loadUpcoming();
+  }, [loadUpcoming]);
+
+  useEffect(() => {
+    fetcher("/users/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d && setMeId(d.id))
+      .catch(() => {});
+  }, [fetcher]);
+
+  // нажали на сообщение — прокручиваем так, чтобы панель действий была видна
+  useEffect(() => {
+    if (!activeId) return;
+    const t = setTimeout(() => {
+      document.getElementById(`msg-${activeId}`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }, 50);
+    return () => clearTimeout(t);
+  }, [activeId]);
+
   // события в реальном времени
   useEffect(() => {
     return socket.subscribe((e: ChatEvent) => {
       if (e.type === "_open") {
-        if (loadedRef.current) resync();
+        if (loadedRef.current) {
+          resync();
+          loadUpcoming();
+        }
         return;
       }
       if (e.conversation_id !== convId) return;
       if (e.type === "message") {
         const m = e.message as ChatMessage;
         setMessages((p) => upsertMessage(p, m));
+        if (m.kind === "booking") loadUpcoming();
         if (m.sender_role !== me) {
           setTyping(false);
           if (atBottomRef.current && document.visibilityState === "visible") {
@@ -149,7 +213,7 @@ export default function ChatThread({ convId, me, fetcher, socket, title, subtitl
         } else if (atBottomRef.current) {
           pendingScroll.current = "smooth";
         }
-      } else if (e.type === "message_updated" || e.type === "message_deleted") {
+      } else if (e.type === "message_updated" || e.type === "message_deleted" || e.type === "reaction") {
         const m = e.message as ChatMessage;
         setMessages((p) => p.map((x) => (x.id === m.id ? { ...x, ...m } : x)));
       } else if (e.type === "read") {
@@ -162,7 +226,7 @@ export default function ChatThread({ convId, me, fetcher, socket, title, subtitl
         }
       }
     });
-  }, [socket, convId, me, resync, markRead]);
+  }, [socket, convId, me, resync, markRead, loadUpcoming]);
 
   // возвращение на вкладку
   useEffect(() => {
@@ -314,6 +378,19 @@ export default function ChatThread({ convId, me, fetcher, socket, title, subtitl
     deliver({ ...m, pending: true, failed: false });
   }
 
+  async function react(m: ChatMessage, emoji: string) {
+    setActiveId(null);
+    const r = await fetcher(`/chat/messages/${m.id}/reaction`, {
+      method: "PUT",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ emoji }),
+    });
+    if (r.ok) {
+      const d = (await r.json()) as ChatMessage;
+      setMessages((p) => p.map((x) => (x.id === d.id ? { ...x, reactions: d.reactions } : x)));
+    }
+  }
+
   async function remove(m: ChatMessage) {
     setActiveId(null);
     if (!window.confirm("Удалить сообщение?")) return;
@@ -397,18 +474,83 @@ export default function ChatThread({ convId, me, fetcher, socket, title, subtitl
       );
     }
     const mine = m.sender_role === me;
-    const canEdit = mine && !m.deleted && Date.now() - new Date(m.created_at).getTime() < EDIT_MS;
+    const canEdit = mine && !m.deleted && m.kind === "text" && Date.now() - new Date(m.created_at).getTime() < EDIT_MS;
+    const card = m.kind === "booking" && !m.deleted;
     const big = !m.deleted && !m.reply_to && !!m.text && isEmojiOnly(m.text);
+    const isLast = messages[messages.length - 1]?.id === m.id;
+    const showActions = activeId === m.id && !m.deleted && !m.pending && !m.failed;
+    const actions = showActions ? (
+      <div className={`flex flex-col gap-1 ${isLast ? "mb-1" : "mt-1"} ${mine ? "items-end" : "items-start"}`}>
+        <div className="inline-flex gap-0.5 rounded-full bg-white border border-gray-100 shadow-md p-1">
+          {QUICK_REACTIONS.map((e) => (
+            <button
+              key={e}
+              type="button"
+              onClick={() => react(m, e)}
+              className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-gray-100 active:scale-90 transition"
+            >
+              <Emoji char={e} size={24} />
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-1">
+          <button type="button" onClick={() => startReply(m)} className="inline-flex items-center gap-1.5 rounded-lg bg-white border border-gray-100 shadow-sm px-2.5 py-1.5 text-xs text-gray-700 hover:bg-gray-50">
+            <Ico name="reply" className="w-3.5 h-3.5" /> Ответить
+          </button>
+          {canEdit && (
+            <button type="button" onClick={() => startEdit(m)} className="inline-flex items-center gap-1.5 rounded-lg bg-white border border-gray-100 shadow-sm px-2.5 py-1.5 text-xs text-gray-700 hover:bg-gray-50">
+              <Ico name="edit" className="w-3.5 h-3.5" /> Изменить
+            </button>
+          )}
+          {mine && (
+            <button type="button" onClick={() => remove(m)} className="inline-flex items-center gap-1.5 rounded-lg bg-white border border-gray-100 shadow-sm px-2.5 py-1.5 text-xs text-red-600 hover:bg-red-50">
+              <Ico name="trash" className="w-3.5 h-3.5" /> Удалить
+            </button>
+          )}
+        </div>
+      </div>
+    ) : null;
+
+    const grouped = new Map<string, { count: number; mine: boolean }>();
+    for (const r of m.reactions ?? []) {
+      const g = grouped.get(r.emoji) ?? { count: 0, mine: false };
+      g.count += 1;
+      if (r.uid === meId) g.mine = true;
+      grouped.set(r.emoji, g);
+    }
+    const reactionChips =
+      grouped.size > 0 ? (
+        <div className={`mt-1 flex flex-wrap gap-1 ${mine ? "justify-end" : ""}`}>
+          {Array.from(grouped.entries()).map(([emoji, g]) => (
+            <button
+              key={emoji}
+              type="button"
+              onClick={() => react(m, emoji)}
+              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition ${
+                g.mine ? "border-brand-blue bg-brand-blue/10 text-brand-blue-dark" : "border-gray-200 bg-white text-gray-600"
+              }`}
+            >
+              <Emoji char={emoji} size={16} />
+              {g.count > 1 && <span>{g.count}</span>}
+            </button>
+          ))}
+        </div>
+      ) : null;
     return (
       <div key={m.id} id={`msg-${m.id}`} className={`flex ${mine ? "justify-end" : "justify-start"} rounded-2xl transition ${flashId === m.id ? "ring-2 ring-brand-yellow" : ""}`}>
         <div className="max-w-[82%] sm:max-w-[70%]">
+          {isLast && actions}
           <div
             onClick={() => !m.pending && setActiveId(activeId === m.id ? null : m.id)}
             className={`flow-root cursor-pointer ${
               big
                 ? "px-1 py-0.5"
                 : `rounded-2xl px-3.5 py-2 text-sm shadow-sm ${
-                    mine ? "bg-brand-blue text-white rounded-br-md" : "bg-white text-gray-900 border border-gray-100 rounded-bl-md"
+                    card
+                      ? "bg-white text-gray-900 border border-brand-yellow/70"
+                      : mine
+                      ? "bg-brand-blue text-white rounded-br-md"
+                      : "bg-white text-gray-900 border border-gray-100 rounded-bl-md"
                   }`
             }`}
           >
@@ -439,10 +581,10 @@ export default function ChatThread({ convId, me, fetcher, socket, title, subtitl
                     ))}
                 </span>
               ) : (
-                <MessageText text={m.text ?? ""} />
+                card ? <BookingCard text={m.text ?? ""} /> : <MessageText text={m.text ?? ""} />
               )
             )}
-            <span className={`${big ? "flex justify-end mt-0.5" : "float-right ml-3 mt-1.5 inline-flex"} items-center gap-1 text-[11px] leading-none ${mine && !big ? "text-white/70" : "text-gray-400"}`}>
+            <span className={`${big ? "flex justify-end mt-0.5" : "float-right ml-3 mt-1.5 inline-flex"} items-center gap-1 text-[11px] leading-none ${mine && !big && !card ? "text-white/70" : "text-gray-400"}`}>
               {m.edited_at && !m.deleted && <span>изменено</span>}
               <span>{formatTime(m.created_at)}</span>
               {mine &&
@@ -452,10 +594,11 @@ export default function ChatThread({ convId, me, fetcher, socket, title, subtitl
                 ) : m.failed ? (
                   <span className="text-red-300 font-bold">!</span>
                 ) : (
-                  <Ico name={m.read ? "check-double" : "check"} className={`w-3.5 h-3.5 ${m.read ? (big ? "text-brand-blue" : "text-brand-yellow") : ""}`} />
+                  <Ico name={m.read ? "check-double" : "check"} className={`w-3.5 h-3.5 ${m.read ? (big || card ? "text-brand-blue" : "text-brand-yellow") : ""}`} />
                 ))}
             </span>
           </div>
+          {reactionChips}
           {m.failed && (
             <div className="mt-1 flex justify-end gap-3 text-xs">
               <span className="text-red-500">Не отправлено</span>
@@ -467,23 +610,7 @@ export default function ChatThread({ convId, me, fetcher, socket, title, subtitl
               </button>
             </div>
           )}
-          {activeId === m.id && !m.deleted && !m.pending && !m.failed && (
-            <div className={`mt-1 flex gap-1 ${mine ? "justify-end" : ""}`}>
-              <button type="button" onClick={() => startReply(m)} className="inline-flex items-center gap-1.5 rounded-lg bg-white border border-gray-100 shadow-sm px-2.5 py-1.5 text-xs text-gray-700 hover:bg-gray-50">
-                <Ico name="reply" className="w-3.5 h-3.5" /> Ответить
-              </button>
-              {canEdit && (
-                <button type="button" onClick={() => startEdit(m)} className="inline-flex items-center gap-1.5 rounded-lg bg-white border border-gray-100 shadow-sm px-2.5 py-1.5 text-xs text-gray-700 hover:bg-gray-50">
-                  <Ico name="edit" className="w-3.5 h-3.5" /> Изменить
-                </button>
-              )}
-              {mine && (
-                <button type="button" onClick={() => remove(m)} className="inline-flex items-center gap-1.5 rounded-lg bg-white border border-gray-100 shadow-sm px-2.5 py-1.5 text-xs text-red-600 hover:bg-red-50">
-                  <Ico name="trash" className="w-3.5 h-3.5" /> Удалить
-                </button>
-              )}
-            </div>
-          )}
+          {!isLast && actions}
         </div>
       </div>
     );
@@ -516,7 +643,7 @@ export default function ChatThread({ convId, me, fetcher, socket, title, subtitl
     out.push(renderBubble(m));
   }
   return out;
-  }, [messages, firstUnreadId, activeId, flashId, me, convId, fetcher]);
+  }, [messages, firstUnreadId, activeId, flashId, me, convId, fetcher, meId]);
 
   return (
     <div className="flex flex-col h-full min-h-0 w-full bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -530,7 +657,13 @@ export default function ChatThread({ convId, me, fetcher, socket, title, subtitl
           {(title.trim()[0] || "?").toUpperCase()}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="font-semibold text-gray-900 truncate">{title}</div>
+          {titleHref ? (
+            <Link href={titleHref} className="block font-semibold text-gray-900 truncate hover:text-brand-blue hover:underline">
+              {title}
+            </Link>
+          ) : (
+            <div className="font-semibold text-gray-900 truncate">{title}</div>
+          )}
           <div className="text-xs truncate h-4">
             {typing ? (
               <span className="text-brand-blue font-medium animate-pulse">печатает…</span>
@@ -541,6 +674,23 @@ export default function ChatThread({ convId, me, fetcher, socket, title, subtitl
         </div>
         {action}
       </div>
+
+      {upcoming.length > 0 && (
+        <div className="flex items-center gap-2 px-3 sm:px-4 py-2 border-b border-gray-100 bg-brand-yellow/10 overflow-x-auto">
+          <Ico name="calendar" className="w-4 h-4 text-brand-blue flex-shrink-0" />
+          {upcoming.slice(0, 3).map((b) => (
+            <span
+              key={b.id}
+              className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-white border border-gray-100 shadow-sm px-2.5 py-1 text-xs text-gray-800"
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${b.status === "confirmed" ? "bg-emerald-500" : "bg-amber-400"}`} />
+              {shortDay(b.date)}, {b.start_time}
+              <span className="text-gray-400">· {b.status === "confirmed" ? "подтверждена" : "ждёт подтверждения"}</span>
+            </span>
+          ))}
+          {upcoming.length > 3 && <span className="text-xs text-gray-500 whitespace-nowrap">и ещё {upcoming.length - 3}</span>}
+        </div>
+      )}
 
       <div className="relative flex-1 min-h-0">
         <div ref={scrollRef} onScroll={onScroll} className="relative h-full overflow-y-auto px-3 sm:px-4 py-3 space-y-1.5 bg-brand-blue/5 [overflow-anchor:none]">

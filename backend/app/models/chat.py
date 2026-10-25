@@ -4,7 +4,7 @@
 
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import String, Text, Integer, DateTime, ForeignKey, Index, text as sql_text
+from sqlalchemy import String, Text, Integer, DateTime, ForeignKey, Index, UniqueConstraint, text as sql_text
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import UUID
 from app.database import Base
@@ -61,3 +61,19 @@ class Message(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # прочитано второй стороной (для сообщения клиента — любым менеджером)
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class MessageReaction(Base):
+    """Реакция на сообщение: у одного пользователя — одна реакция на сообщение."""
+
+    __tablename__ = "chat_reactions"
+    __table_args__ = (UniqueConstraint("message_id", "user_id", name="uq_chat_reaction"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    message_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("chat_messages.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
+    role: Mapped[str] = mapped_column(String(10))
+    emoji: Mapped[str] = mapped_column(String(16))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)

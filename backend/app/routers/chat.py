@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.deps import get_current_user, require_manager
 from app.models import Booking, User
-from app.models.chat import Conversation, Message
+from app.models.chat import Conversation, Message, MessageReaction
 from app.redis_client import redis_client
 from app.routers.bookings import _today_msk
 from app.security import decode_access_token
@@ -57,7 +57,7 @@ async def _emit(client_id, event: dict) -> None:
     await redis_client.publish(MANAGERS_CHANNEL, data)
 
 
-def _msg_dict(m: Message, reply: Message | None = None) -> dict:
+def _msg_dict(m: Message, reply: Message | None = None, reactions: list | None = None) -> dict:
     deleted = m.deleted_at is not None
     return {
         "id": str(m.id),
@@ -70,7 +70,7 @@ def _msg_dict(m: Message, reply: Message | None = None) -> dict:
             {
                 "id": str(reply.id),
                 "sender_role": reply.sender_role,
-                "text": None if reply.deleted_at else (reply.text or "")[:120],
+                "text": None if reply.deleted_at else ((reply.text or "").split("\n")[0] if reply.kind == "booking" else (reply.text or ""))[:120],
             }
             if reply is not None
             else None
@@ -79,6 +79,7 @@ def _msg_dict(m: Message, reply: Message | None = None) -> dict:
         "edited_at": _iso(m.edited_at),
         "read": m.read_at is not None,
         "client_msg_id": m.client_msg_id,
+        "reactions": reactions or [],
     }
 
 
@@ -88,7 +89,12 @@ async def _with_replies(db: AsyncSession, messages: list[Message]) -> list[dict]
     if ids:
         rows = await db.execute(select(Message).where(Message.id.in_(ids)))
         replies = {r.id: r for r in rows.scalars().all()}
-    return [_msg_dict(m, replies.get(m.reply_to_id)) for m in messages]
+    reactions: dict = {}
+    if messages:
+        rows = await db.execute(select(MessageReaction).where(MessageReaction.message_id.in_([m.id for m in messages])))
+        for r in rows.scalars().all():
+            reactions.setdefault(r.message_id, []).append({"emoji": r.emoji, "uid": str(r.user_id), "role": r.role})
+    return [_msg_dict(m, replies.get(m.reply_to_id), reactions.get(m.id)) for m in messages]
 
 
 def _conv_item(conv: Conversation, client: User) -> dict:
@@ -127,6 +133,49 @@ async def _conv_for(db: AsyncSession, conv_id: uuid.UUID, user: User) -> Convers
     if conv is None or (not _is_manager(user) and conv.client_id != user.id):
         raise HTTPException(status_code=404, detail="Диалог не найден")
     return conv
+
+
+async def post_booking_message(
+    db: AsyncSession, client: User, actor: str, actor_user: User | None, title: str, lines: list[str]
+) -> None:
+    """Событие по записи — карточкой в чат клиента. actor: client (клиент сам что-то сделал) или manager."""
+    if client.role == "manager":
+        return
+    if actor == "manager" and not client.password_hash:
+        return  # гость без аккаунта: читать некому
+    conv = await _get_or_create_conv(db, client.id)
+    text = "\n".join([title, *lines])
+    now = _utcnow()
+    msg = Message(
+        conversation_id=conv.id,
+        sender_id=actor_user.id if actor_user is not None else client.id,
+        sender_role=actor,
+        kind="booking",
+        text=text,
+        created_at=now,
+    )
+    db.add(msg)
+    unread_name = "manager_unread" if actor == "client" else "client_unread"
+    unread_col = Conversation.manager_unread if actor == "client" else Conversation.client_unread
+    await db.execute(
+        update(Conversation)
+        .where(Conversation.id == conv.id)
+        .values(last_message_at=now, last_message_preview=text.replace("\n", " · ")[:120], **{unread_name: unread_col + 1})
+    )
+    await db.commit()
+    counts = (
+        await db.execute(select(Conversation.client_unread, Conversation.manager_unread).where(Conversation.id == conv.id))
+    ).one()
+    await _emit(
+        conv.client_id,
+        {
+            "type": "message",
+            "conversation_id": str(conv.id),
+            "message": _msg_dict(msg),
+            "client_unread": counts[0],
+            "manager_unread": counts[1],
+        },
+    )
 
 
 class MessageIn(BaseModel):
@@ -194,6 +243,29 @@ async def get_conversation(conv_id: uuid.UUID, user: User = Depends(get_current_
         client = (await db.execute(select(User).where(User.id == conv.client_id))).scalar_one()
         return _conv_item(conv, client)
     return {"id": str(conv.id), "unread": conv.client_unread}
+
+
+@router.get("/conversations/{conv_id}/bookings")
+async def conversation_bookings(conv_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Ближайшие активные записи клиента — напоминание над перепиской."""
+    conv = await _conv_for(db, conv_id, user)
+    rows = (
+        await db.execute(
+            select(Booking)
+            .where(
+                Booking.user_id == conv.client_id,
+                Booking.status.in_(["pending", "confirmed"]),
+                Booking.part == 0,
+                Booking.date >= _today_msk(),
+            )
+            .order_by(Booking.date, Booking.start_time)
+            .limit(6)
+        )
+    ).scalars().all()
+    return [
+        {"id": str(b.id), "date": str(b.date)[:10], "start_time": str(b.start_time)[:5], "status": b.status}
+        for b in rows
+    ]
 
 
 # ---------- сообщения ----------
@@ -338,9 +410,46 @@ async def _own_message(db: AsyncSession, msg_id: uuid.UUID, user: User) -> tuple
     return msg, conv
 
 
+ALLOWED_REACTIONS = ["👍", "👎", "❤️", "🔥", "😂", "😮", "😢", "🙏"]
+_CANON = {e.replace("\ufe0f", ""): e for e in ALLOWED_REACTIONS}
+
+
+class ReactionIn(BaseModel):
+    emoji: str = Field(min_length=1, max_length=16)
+
+
+@router.put("/messages/{msg_id}/reaction")
+async def set_reaction(msg_id: uuid.UUID, payload: ReactionIn, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Поставить реакцию; та же реакция повторно — снимает; другая — заменяет."""
+    msg = (await db.execute(select(Message).where(Message.id == msg_id))).scalar_one_or_none()
+    if msg is None:
+        raise HTTPException(status_code=404, detail="Сообщение не найдено")
+    conv = await _conv_for(db, msg.conversation_id, user)
+    if msg.deleted_at is not None:
+        raise HTTPException(status_code=409, detail="Сообщение удалено")
+    emoji = _CANON.get(payload.emoji.replace("\ufe0f", ""))
+    if emoji is None:
+        raise HTTPException(status_code=400, detail="Такой реакции нет")
+    existing = (
+        await db.execute(select(MessageReaction).where(MessageReaction.message_id == msg.id, MessageReaction.user_id == user.id))
+    ).scalar_one_or_none()
+    if existing is not None and existing.emoji == emoji:
+        await db.delete(existing)
+    elif existing is not None:
+        existing.emoji = emoji
+    else:
+        db.add(MessageReaction(message_id=msg.id, user_id=user.id, role=_side(user), emoji=emoji))
+    await db.commit()
+    data = (await _with_replies(db, [msg]))[0]
+    await _emit(conv.client_id, {"type": "reaction", "conversation_id": str(conv.id), "message": data})
+    return data
+
+
 @router.patch("/messages/{msg_id}")
 async def edit_message(msg_id: uuid.UUID, payload: MessageEdit, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     msg, conv = await _own_message(db, msg_id, user)
+    if msg.kind != "text":
+        raise HTTPException(status_code=409, detail="Это сообщение нельзя редактировать")
     if _utcnow() - msg.created_at > EDIT_WINDOW:
         raise HTTPException(status_code=409, detail="Редактировать можно в течение суток")
     msg.text = payload.text

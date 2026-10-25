@@ -13,6 +13,7 @@ export type ChatMessage = {
   edited_at: string | null;
   read: boolean;
   client_msg_id: string | null;
+  reactions?: { emoji: string; uid: string; role: string }[];
   pending?: boolean;
   failed?: boolean;
 };
@@ -88,4 +89,11 @@ export function listTime(iso: string | null): string {
   if (!iso) return "";
   if (dayKey(iso) === dayKey(new Date().toISOString())) return formatTime(iso);
   return shortFmt.format(new Date(iso));
+}
+
+const shortDayFmt = new Intl.DateTimeFormat("ru-RU", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+
+/** "2030-01-15" → «вт, 15 янв.» */
+export function shortDay(isoDate: string): string {
+  return shortDayFmt.format(new Date(isoDate + "T00:00:00Z"));
 }

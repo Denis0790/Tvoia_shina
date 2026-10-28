@@ -19,3 +19,7 @@ frontend/out/
 
 # os
 .DS_Store
+backend/uploads/
+
+# закрытые файлы чата
+backend/chat_media/

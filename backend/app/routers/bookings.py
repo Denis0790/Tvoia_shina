@@ -1,7 +1,7 @@
 import uuid
 from datetime import date as date_type, datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,7 +34,7 @@ class BookingCreate(BaseModel):
     date: date_type
     start_time: str
     service_ids: list[uuid.UUID]
-    comment: str | None = None
+    comment: str | None = Field(default=None, max_length=200)  # коротко: не «поэма»
 
 
 @router.post("")
@@ -43,6 +43,8 @@ async def create_booking(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    if user.blocked:
+        raise HTTPException(status_code=403, detail="Онлайн-запись для вас недоступна. Пожалуйста, позвоните нам")
     if payload.date < _today_msk():
         raise HTTPException(status_code=400, detail="Нельзя записаться на прошедшую дату")
 

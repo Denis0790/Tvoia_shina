@@ -1,3 +1,5 @@
+import asyncio
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Depends
@@ -16,6 +18,23 @@ from app.routers.services import router as services_router
 from app.routers.posts import router as posts_router
 from app.routers.profile import router as profile_router, UPLOAD_DIR
 from app.routers.chat import router as chat_router
+from app.routers.stats import router as stats_router
+
+
+async def _media_cleanup_loop():
+    """Раз в час: удаляем неприкреплённые файлы чата и переписку старше срока хранения."""
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+
+    from app.routers.chat import cleanup_media
+
+    await asyncio.sleep(60)
+    while True:
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as db:
+                await cleanup_media(db)
+        except Exception:
+            logging.getLogger(__name__).exception("очистка медиа чата не удалась")
+        await asyncio.sleep(3600)
 
 
 @asynccontextmanager
@@ -57,7 +76,13 @@ async def lifespan(app: FastAPI):
                 "ON bookings (post_id, date, start_time) WHERE status IN ('pending', 'confirmed')"
             )
         )
+        await conn.execute(text("ALTER TABLE chat_attachments ADD COLUMN IF NOT EXISTS original_name VARCHAR(200)"))
+        await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS blocked BOOLEAN NOT NULL DEFAULT FALSE"))
+        await conn.execute(text("ALTER TABLE conversations ADD COLUMN IF NOT EXISTS pinned BOOLEAN NOT NULL DEFAULT FALSE"))
+        await conn.execute(text("ALTER TABLE conversations ADD COLUMN IF NOT EXISTS muted BOOLEAN NOT NULL DEFAULT FALSE"))
+    cleanup_task = asyncio.create_task(_media_cleanup_loop())
     yield
+    cleanup_task.cancel()
 
 
 app = FastAPI(title="Tvoya Shina API", lifespan=lifespan)
@@ -79,6 +104,7 @@ app.include_router(services_router)
 app.include_router(posts_router)
 app.include_router(profile_router)
 app.include_router(chat_router)
+app.include_router(stats_router)
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 

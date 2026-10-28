@@ -6,7 +6,7 @@ password_hash используется только для входа персо
 
 import uuid
 from datetime import datetime
-from sqlalchemy import String, DateTime, ForeignKey, UniqueConstraint, func
+from sqlalchemy import Boolean, String, DateTime, ForeignKey, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 from app.database import Base
@@ -25,6 +25,8 @@ class User(Base):
     # person — обычный клиент (вход по SMS/телефону), org — организация (логин = ИНН, пароль выдаёт менеджер)
     kind: Mapped[str] = mapped_column(String(10), default="person", server_default="person")
     inn: Mapped[str | None] = mapped_column(String(12), unique=True, index=True, nullable=True)
+    # заблокирован менеджером: не пишет в чат и не записывается онлайн
+    blocked: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     oauth_accounts: Mapped[list["OAuthAccount"]] = relationship(back_populates="user", cascade="all, delete-orphan")

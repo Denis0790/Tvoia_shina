@@ -16,6 +16,7 @@ const NAV_ITEMS = [
   { href: "/nord/posts", label: "Посты", icon: "/icons/posts.svg" },
   { href: "/nord/services", label: "Услуги", icon: "/icons/repair.svg" },
   { href: "/nord/chat", label: "Чат", icon: "/icons/chat.svg" },
+  { href: "/nord/stats", label: "Статистика", icon: "/icons/stats.svg" },
 ];
 
 function NavIcon({ src, active }: { src: string; active: boolean }) {

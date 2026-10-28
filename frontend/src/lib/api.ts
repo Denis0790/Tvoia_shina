@@ -790,3 +790,51 @@ export async function getPendingDays(start: string, days = 7): Promise<Record<st
   if (!res.ok) return {};
   return res.json();
 }
+
+// ---------- статистика ----------
+export type StatsPost = {
+  id: string;
+  name: string;
+  bookings: number;
+  hours: number;
+  load: number | null;
+  cancelled: number;
+  top_services: { name: string; count: number }[];
+};
+
+export type Stats = {
+  range: { from: string; to: string; period: string };
+  overview: {
+    confirmed: number;
+    pending: number;
+    cancelled: number;
+    cancel_rate: number | null;
+    hours: number;
+    load: number | null;
+    new_clients: number;
+  };
+  posts: StatsPost[];
+  services: { id: string; name: string; category: string | null; count: number; hours: number; share: number }[];
+  other: { count: number; no_services: number; items: { text: string; count: number }[] };
+  series: { granularity: "day" | "week" | "month"; points: { label: string; count: number; hours: number }[] };
+};
+
+export async function getStats(q: {
+  period: string;
+  from?: string;
+  to?: string;
+  post_id?: string;
+}): Promise<{ ok: true; data: Stats } | { ok: false; error: string }> {
+  const qs = new URLSearchParams({ period: q.period });
+  if (q.period === "custom" && q.from && q.to) {
+    qs.set("date_from", q.from);
+    qs.set("date_to", q.to);
+  }
+  if (q.post_id) qs.set("post_id", q.post_id);
+  const res = await managerApiFetch(`/stats?${qs}`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    return { ok: false, error: body && typeof body.detail === "string" ? body.detail : "Не удалось загрузить статистику" };
+  }
+  return { ok: true, data: await res.json() };
+}

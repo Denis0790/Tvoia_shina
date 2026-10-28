@@ -651,6 +651,13 @@ function ClientDetail({
             >
               <Icon name="chat" className="w-[18px] h-[18px]" />
             </Link>
+            <Link
+              href={`/nord/calendar?client=${client.id}`}
+              className="ml-1 inline-flex items-center gap-1.5 h-9 rounded-xl bg-brand-yellow text-brand-blue-dark text-xs font-semibold px-3 hover:brightness-95 whitespace-nowrap"
+            >
+              <Icon name="calendar-plus" className="w-4 h-4" />
+              Записать
+            </Link>
           </div>
         </div>
 

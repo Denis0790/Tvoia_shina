@@ -11,3 +11,33 @@ body {
   background: #f6f6f4;
   color: #1a1a1a;
 }
+
+/* место под полосу прокрутки резервируется всегда: страницы не «прыгают» при переходе между короткими и длинными */
+html {
+  scrollbar-gutter: stable;
+}
+
+/* печать расписания дня (календарь менеджера): при печати остаётся только лист #print-root */
+#print-root {
+  display: none;
+}
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 8mm;
+  }
+  body > *:not(#print-root) {
+    display: none !important;
+  }
+  #print-root {
+    display: block !important;
+  }
+  body {
+    background: #fff !important;
+  }
+  #print-root,
+  #print-root * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

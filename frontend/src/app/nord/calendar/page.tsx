@@ -1,5 +1,9 @@
 "use client";
 
+import { Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { createPortal } from "react-dom";
+
 import { getPendingDays } from "@/lib/api";
 
 import { useMemo, useState, useEffect, useLayoutEffect, useRef } from "react";
@@ -12,6 +16,7 @@ import {
   cancelBooking,
   movePendingBooking,
   createManualBooking,
+  getClients,
   searchClientsForBooking,
   getServices,
   type Service,
@@ -377,6 +382,7 @@ function NewBookingModal({
   dateLabel,
   dateISO,
   initialTime,
+  initialClient,
   onClose,
   onSubmit,
 }: {
@@ -384,6 +390,7 @@ function NewBookingModal({
   dateLabel: string;
   dateISO: string;
   initialTime: string;
+  initialClient?: BookingClientMatch | null;
   onClose: () => void;
   onSubmit: (form: NewBookingForm) => Promise<string | null>;
 }) {
@@ -406,6 +413,7 @@ function NewBookingModal({
   const [catalog, setCatalog] = useState<Service[]>([]);
   const [picked, setPicked] = useState<Service[]>([]);
   const [svcFocus, setSvcFocus] = useState(false);
+  const [others, setOthers] = useState<string[]>([]); // «Другое» — услуги не из справочника
 
   useEffect(() => {
     getServices().then(setCatalog).catch(() => setCatalog([]));
@@ -420,6 +428,12 @@ function NewBookingModal({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  // клиент выбран заранее (переход из чата или карточки клиента) — подставляем сразу
+  useEffect(() => {
+    if (initialClient) selectClient(initialClient);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function selectClient(m: BookingClientMatch) {
     setSelected(m);
@@ -513,6 +527,18 @@ function NewBookingModal({
     if (next.length > 0) setDuration(Math.min(MAX_DURATION, next.reduce((sum, x) => sum + x.duration_minutes, 0)));
   }
 
+  const rawFragment = (servicesText.split(/[,;\n]/).pop() ?? "").trim();
+  // в справочнике нет ничего похожего — предлагаем «Другое»
+  const showOther = svcFragment.length >= 2 && !catalog.some((x) => x.name.toLowerCase().includes(svcFragment));
+
+  function pickOther() {
+    if (!rawFragment) return;
+    const text = rawFragment;
+    const cut = Math.max(servicesText.lastIndexOf(","), servicesText.lastIndexOf(";"), servicesText.lastIndexOf("\n"));
+    setServicesText(cut >= 0 ? servicesText.slice(0, cut).replace(/[\s,;]+$/, "") : "");
+    setOthers((o) => (o.includes(text) ? o : [...o, text]));
+  }
+
   function pickService(x: Service) {
     const cut = Math.max(servicesText.lastIndexOf(","), servicesText.lastIndexOf(";"), servicesText.lastIndexOf("\n"));
     setServicesText(cut >= 0 ? servicesText.slice(0, cut).replace(/[\s,;]+$/, "") : "");
@@ -524,11 +550,25 @@ function NewBookingModal({
 
   async function submit() {
     if (!canSave) return;
+    // слова, оставшиеся в поле без выбора подсказки: совпали с названием услуги — берём, иначе просим выбрать из списка
+    const parts = servicesText.split(/[,;\n]/).map((x) => x.trim()).filter(Boolean);
+    const all = [...picked];
+    const unknown: string[] = [];
+    for (const part of parts) {
+      const hit = catalog.find((x) => x.name.trim().toLowerCase() === part.toLowerCase());
+      if (!hit) unknown.push(part);
+      else if (!all.some((x) => x.id === hit.id)) all.push(hit);
+    }
+    if (unknown.length > 0) {
+      setError(`Выберите подсказку или «Другое»: «${unknown.join("», «")}»`);
+      return;
+    }
+    const finalDuration = all.length > picked.length ? Math.min(MAX_DURATION, all.reduce((sum, x) => sum + x.duration_minutes, 0)) : duration;
     setSaving(true);
     setError(null);
     const err = await onSubmit({
       start_time: time,
-      duration_minutes: duration,
+      duration_minutes: finalDuration,
       user_id: selected?.user_id ?? null,
       phone: selected?.phone ?? (digits.length === 10 ? `+7${digits}` : null),
       client_name: isOrg ? null : name.trim() || null,
@@ -537,8 +577,8 @@ function NewBookingModal({
       car_model: useNewCar ? model.trim() || null : null,
       car_plate: useNewCar ? plate.trim() || null : null,
       vin: useNewCar ? vin.trim() || null : null,
-      services_text: servicesText.trim() || null,
-      service_ids: picked.map((x) => x.id),
+      services_text: others.length > 0 ? others.join(", ").slice(0, 500) : null, // «Другое» хранится отдельно от справочных услуг
+      service_ids: all.map((x) => x.id),
     });
     if (err) {
       setError(err);
@@ -798,7 +838,7 @@ function NewBookingModal({
 
           <div>
             <p className="text-xs text-gray-500 mb-1.5">Услуги</p>
-            {picked.length > 0 && (
+            {picked.length + others.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mb-2">
                 {picked.map((x) => (
                   <span
@@ -816,6 +856,22 @@ function NewBookingModal({
                     </button>
                   </span>
                 ))}
+                {others.map((t) => (
+                  <span
+                    key={t}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-brand-yellow/30 text-brand-blue-dark text-xs font-medium pl-2.5 pr-1.5 py-1"
+                  >
+                    Другое: {t}
+                    <button
+                      type="button"
+                      aria-label="Убрать"
+                      onClick={() => setOthers((o) => o.filter((v) => v !== t))}
+                      className="w-4 h-4 rounded-full hover:bg-brand-yellow/50 flex items-center justify-center cursor-pointer leading-none"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
               </div>
             )}
             <div className="relative">
@@ -823,13 +879,20 @@ function NewBookingModal({
                 value={servicesText}
                 maxLength={500}
                 onChange={(e) => setServicesText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && (svcSuggestions.length > 0 || showOther)) {
+                    e.preventDefault();
+                    if (svcSuggestions.length > 0) pickService(svcSuggestions[0]);
+                    else pickOther();
+                  }
+                }}
                 onFocus={() => setSvcFocus(true)}
                 onBlur={() => setTimeout(() => setSvcFocus(false), 150)}
-                placeholder="Услуги — начните вводить название или опишите словами"
+                placeholder="Начните вводить услугу и выберите из списка"
                 rows={3}
                 className={`${fieldCls} resize-none`}
               />
-              {svcFocus && svcSuggestions.length > 0 && (
+              {svcFocus && (svcSuggestions.length > 0 || showOther) && (
                 <div className="absolute z-10 bottom-full left-0 right-0 mb-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
                   {svcSuggestions.map((x) => (
                     <button
@@ -845,6 +908,19 @@ function NewBookingModal({
                       <span className="text-xs text-gray-400 whitespace-nowrap">{formatDuration(x.duration_minutes)}</span>
                     </button>
                   ))}
+                  {svcSuggestions.length === 0 && showOther && (
+                    <button
+                      type="button"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        pickOther();
+                      }}
+                      className="w-full text-left px-3 py-2 hover:bg-brand-yellow/20 transition-colors cursor-pointer flex items-center justify-between gap-3"
+                    >
+                      <span className="text-sm text-gray-900 truncate">Другое: «{rawFragment}»</span>
+                      <span className="text-xs text-gray-400 whitespace-nowrap">нет в справочнике</span>
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -930,7 +1006,149 @@ function NoteDialog({
   );
 }
 
-export default function CalendarPage() {
+/** Лист для печати: расписание выбранного дня, посты — колонками. Показывается только при печати. */
+function PrintSheet({ date, posts }: { date: Date; posts: CalendarPost[] }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted) return null;
+
+  const cols = posts.filter((p) => p.working && p.slots.length > 0);
+  const title = date.toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  let startMin = 24 * 60;
+  let endMin = 0;
+  for (const p of cols) {
+    startMin = Math.min(startMin, timeToMinutes(p.slots[0].time));
+    endMin = Math.max(endMin, timeToMinutes(p.slots[p.slots.length - 1].time) + 30);
+  }
+  const total = Math.max(60, endMin - startMin);
+  const scale = Math.min(0.9, 235 / total); // мм на минуту: весь день помещается на один лист А4
+  const mm = (min: number) => `${(min - startMin) * scale}mm`;
+  const ticks: number[] = [];
+  for (let m = startMin; m < endMin; m += 30) ticks.push(m);
+
+  const content = (
+    <div id="print-root" style={{ fontFamily: "Arial, Helvetica, sans-serif", color: "#000" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "3mm" }}>
+        <div style={{ fontSize: "14pt", fontWeight: 700 }}>Расписание · {title}</div>
+        <div style={{ fontSize: "8pt", color: "#555" }}>Твоя Шина</div>
+      </div>
+      {cols.length === 0 ? (
+        <div style={{ fontSize: "11pt", color: "#555", padding: "10mm 0" }}>В этот день посты не работают</div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: `12mm repeat(${cols.length}, minmax(0, 1fr))`, columnGap: "1.5mm" }}>
+          <div />
+          {cols.map((p) => (
+            <div key={p.post_id} style={{ textAlign: "center", fontWeight: 700, fontSize: "10pt", borderBottom: "0.4mm solid #000", paddingBottom: "1mm", marginBottom: "1mm" }}>
+              {p.name}
+            </div>
+          ))}
+          <div style={{ position: "relative", height: `${total * scale}mm` }}>
+            {ticks
+              .filter((m) => m % 60 === 0)
+              .map((m) => (
+                <div key={m} style={{ position: "absolute", top: mm(m), right: "1mm", fontSize: "8pt", fontWeight: 700, lineHeight: 1, transform: "translateY(-0.5em)" }}>
+                  {minutesToTime(m)}
+                </div>
+              ))}
+          </div>
+          {cols.map((p) => (
+            <div key={p.post_id} style={{ position: "relative", height: `${total * scale}mm`, borderLeft: "0.2mm solid #999", borderRight: "0.2mm solid #999" }}>
+              {ticks.map((m) => (
+                <div key={m} style={{ position: "absolute", left: 0, right: 0, top: mm(m), borderTop: m % 60 === 0 ? "0.2mm solid #999" : "0.2mm dotted #ccc" }} />
+              ))}
+              {p.slots
+                .filter((sl) => sl.booking && sl.is_start)
+                .map((sl) => {
+                  const b = sl.booking!;
+                  const st = timeToMinutes(b.start_time);
+                  const dur = Math.max(15, Math.min(b.duration_minutes, endMin - st));
+                  const pending = sl.status === "pending";
+                  const name = b.is_org || b.is_guest ? b.client_name || "Гость" : firstName(b.client_name || "Гость");
+                  const car = b.car ? `${b.car.make} ${b.car.model}${b.car.plate ? " " + b.car.plate : ""}` : "";
+                  const work = [...b.services.map((x) => x.name), b.services_text].filter(Boolean).join(", ");
+                  return (
+                    <div
+                      key={b.id}
+                      style={{
+                        position: "absolute",
+                        left: "0.4mm",
+                        right: "0.4mm",
+                        top: mm(st),
+                        height: `${dur * scale - 0.6}mm`,
+                        boxSizing: "border-box",
+                        overflow: "hidden",
+                        padding: "0.6mm 1mm",
+                        fontSize: "7.5pt",
+                        lineHeight: 1.15,
+                        background: pending ? "#fff" : "#e6e6e6",
+                        border: pending ? "0.35mm dashed #000" : "0.35mm solid #000",
+                        borderRadius: "0.8mm",
+                      }}
+                    >
+                      <div style={{ fontWeight: 700 }}>
+                        {b.start_time}–{addMinutes(b.start_time, b.duration_minutes)}
+                        {pending ? " · не подтв." : ""}
+                        {b.part > 0 ? " · продолжение" : ""}
+                      </div>
+                      <div>{[name, car].filter(Boolean).join(" · ")}</div>
+                      {work && <div>{work}</div>}
+                    </div>
+                  );
+                })}
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{ marginTop: "2mm", fontSize: "7pt", color: "#555" }}>
+        Серые блоки — подтверждённые записи, пунктир — ожидают подтверждения. Напечатано {new Date().toLocaleString("ru-RU")}
+      </div>
+    </div>
+  );
+  return createPortal(content, document.body);
+}
+
+function CalendarPageInner() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const clientParam = searchParams.get("client");
+  const [bookFor, setBookFor] = useState<BookingClientMatch | null>(null);
+  const [bookForError, setBookForError] = useState<string | null>(null);
+
+  // переход «Записать» из чата / карточки клиента: подтягиваем данные клиента
+  useEffect(() => {
+    setBookFor(null);
+    setBookForError(null);
+    if (!clientParam) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const c = (await getClients()).find((x) => x.id === clientParam);
+        if (!c) {
+          if (!cancelled) setBookForError("клиент не найден");
+          return;
+        }
+        const q = c.phone ? extractNational(c.phone) : (c.full_name ?? "").trim();
+        const found = q.length >= 2 ? (await searchClientsForBooking(q)).find((x) => x.user_id === clientParam) : undefined;
+        const m: BookingClientMatch = found ?? {
+          user_id: c.id,
+          phone: c.phone,
+          kind: c.kind,
+          inn: c.inn,
+          full_name: c.full_name,
+          cars: [],
+          upcoming: [],
+          upcoming_total: 0,
+        };
+        if (!cancelled) setBookFor(m);
+      } catch {
+        if (!cancelled) setBookForError("не удалось загрузить клиента");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [clientParam]);
+
   const [date, setDate] = useState(() => new Date());
   const [posts, setPosts] = useState<CalendarPost[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1225,7 +1443,17 @@ export default function CalendarPage() {
 
   return (
     <div className="-m-6 md:-m-10 p-6 md:p-10 md:rounded-[12px] bg-[#e8eaf0] min-h-[100dvh] md:min-h-[calc(100dvh-2rem)]">
-      <h1 className="text-xl font-semibold text-gray-900 mb-6">Календарь</h1>
+      <div className="flex items-center justify-between gap-3 mb-6">
+        <h1 className="text-xl font-semibold text-gray-900">Календарь</h1>
+        <button
+          type="button"
+          onClick={() => window.print()}
+          className="inline-flex items-center gap-2 h-9 px-3.5 rounded-xl bg-white shadow-sm text-sm text-gray-700 hover:bg-brand-blue/10 hover:text-brand-blue-dark active:scale-95 transition cursor-pointer"
+        >
+          <Icon src="/icons/printer.svg" className="w-4 h-4" />
+          Распечатать день
+        </button>
+      </div>
 
       <div className="flex items-center gap-2 mb-2">
         <button
@@ -1534,6 +1762,7 @@ export default function CalendarPage() {
           dateLabel={formatDateHuman(date)}
           dateISO={toISODate(date)}
           initialTime={newBooking.time}
+          initialClient={bookFor}
           onClose={() => setNewBooking(null)}
           onSubmit={async (form) => {
             const res = await createManualBooking({
@@ -1543,6 +1772,7 @@ export default function CalendarPage() {
             });
             if (!res.ok) return res.error;
             setNewBooking(null);
+            if (clientParam) router.replace("/nord/calendar");
             setToast("Запись создана");
             load();
             return null;
@@ -1565,11 +1795,41 @@ export default function CalendarPage() {
         />
       )}
 
+      <PrintSheet date={date} posts={posts} />
+
+      {clientParam && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-30 max-w-[calc(100vw-2rem)] flex items-center gap-3 rounded-2xl bg-white border border-brand-yellow shadow-lg pl-4 pr-2 py-2.5">
+          <span className="w-1.5 h-8 rounded-full bg-brand-yellow flex-shrink-0" />
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-gray-900 truncate">
+              Запись для: {bookFor ? bookFor.full_name || (bookFor.phone ? formatFullPhone(bookFor.phone) : "клиента") : bookForError ?? "загрузка…"}
+            </div>
+            <div className="text-xs text-gray-500">Нажмите на свободное время — данные клиента подставятся</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => router.replace("/nord/calendar")}
+            aria-label="Отменить"
+            className="w-8 h-8 rounded-full text-gray-400 hover:bg-gray-100 flex items-center justify-center flex-shrink-0"
+          >
+            <Icon src="/icons/close.svg" className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white text-xs px-4 py-2 rounded-full shadow-lg">
           {toast}
         </div>
       )}
     </div>
+  );
+}
+
+export default function CalendarPage() {
+  return (
+    <Suspense fallback={null}>
+      <CalendarPageInner />
+    </Suspense>
   );
 }

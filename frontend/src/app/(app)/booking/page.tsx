@@ -478,6 +478,7 @@ export default function BookingPage() {
               <Card step={cars.length > 0 ? 4 : 3} title="Комментарий">
                 <textarea
                   value={comment}
+                  maxLength={200}
                   onChange={(e) => setComment(e.target.value)}
                   placeholder="Например, прошу заранее оценить стоимость работ и заказать запасные части"
                   rows={3}

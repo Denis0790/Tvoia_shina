@@ -1,6 +1,19 @@
 export type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
 export type Role = "client" | "manager";
 
+export type Attachment = {
+  id: string;
+  kind: "image" | "video" | "file";
+  status: "processing" | "ready" | "failed";
+  width: number | null;
+  height: number | null;
+  duration_ms: number | null;
+  size: number;
+  name: string | null;
+  url?: string;
+  thumb_url?: string;
+};
+
 export type ChatMessage = {
   id: string;
   conversation_id: string;
@@ -14,6 +27,7 @@ export type ChatMessage = {
   read: boolean;
   client_msg_id: string | null;
   reactions?: { emoji: string; uid: string; role: string }[];
+  attachments?: Attachment[];
   pending?: boolean;
   failed?: boolean;
 };
@@ -24,6 +38,9 @@ export type ConversationItem = {
   last_message: string | null;
   last_message_at: string | null;
   unread: number;
+  pinned: boolean;
+  muted: boolean;
+  blocked: boolean;
 };
 
 export type Counters = { unread_messages: number; unread_dialogs: number; pending_bookings: number };
@@ -96,4 +113,23 @@ const shortDayFmt = new Intl.DateTimeFormat("ru-RU", { weekday: "short", day: "n
 /** "2030-01-15" → «вт, 15 янв.» */
 export function shortDay(isoDate: string): string {
   return shortDayFmt.format(new Date(isoDate + "T00:00:00Z"));
+}
+
+export const API_BASE: string = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+/** Ссылки на файлы приходят с сервера относительными — достраиваем адрес. */
+export function mediaSrc(p?: string | null): string {
+  if (!p) return "";
+  return /^https?:/.test(p) ? p : API_BASE.replace(/\/$/, "") + p;
+}
+
+export function formatSize(n: number): string {
+  if (n < 1024) return `${n} Б`;
+  if (n < 1048576) return `${Math.round(n / 1024)} КБ`;
+  return `${(n / 1048576).toFixed(1).replace(".", ",")} МБ`;
+}
+
+export function fmtDuration(ms: number | null): string {
+  const s = Math.round((ms ?? 0) / 1000);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }

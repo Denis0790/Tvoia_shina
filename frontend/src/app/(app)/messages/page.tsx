@@ -10,16 +10,28 @@ export default function MessagesPage() {
   const [convId, setConvId] = useState<string | null>(null);
   const [phone, setPhone] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
+  const [blocked, setBlocked] = useState(false);
 
   useEffect(() => {
     apiFetch("/chat/conversations/mine")
       .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then((d) => setConvId(d.id))
+      .then((d) => {
+        setConvId(d.id);
+        setBlocked(!!d.blocked);
+      })
       .catch(() => setFailed(true));
     getPublicProfile()
       .then((d) => setPhone(d.profile.phone))
       .catch(() => setPhone(null));
   }, []);
+
+  // менеджер заблокировал / разблокировал — плашка меняется сразу
+  useEffect(() => {
+    if (!convId) return;
+    return clientSocket.subscribe((e) => {
+      if (e.type === "conversation" && e.conversation_id === convId && "blocked" in e) setBlocked(!!e.blocked);
+    });
+  }, [convId]);
 
   return (
     <div className="-m-6 md:-m-10 p-6 md:p-10 md:rounded-[12px] bg-[#e8eaf0] h-[calc(100dvh-4rem)] md:h-[calc(100dvh-2rem)] flex flex-col gap-4">
@@ -38,6 +50,7 @@ export default function MessagesPage() {
             title="Твоя Шина"
             subtitle="Автосервис"
             emptyText="Напишите нам — расскажем про работы, цены и свободное время"
+            blockedText={blocked ? "Отправка сообщений недоступна. Пожалуйста, позвоните нам." : null}
             action={
               phone ? (
                 <a

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
+  Attachment,
   ChatMessage,
   Fetcher,
   JSON_HEADERS,
@@ -9,7 +10,10 @@ import {
   dayKey,
   dayLabel,
   formatTime,
+  fmtDuration,
+  formatSize,
   getMessages,
+  mediaSrc,
   newId,
   shortDay,
   upsertMessage,
@@ -19,6 +23,7 @@ import EmojiPicker from "./EmojiPicker";
 import Link from "next/link";
 import Ico from "./Ico";
 import Emoji from "./Emoji";
+import MediaViewer, { ViewerItem } from "./MediaViewer";
 import { isEmojiOnly, splitEmoji } from "@/lib/emojiData";
 
 const EDIT_MS = 24 * 60 * 60 * 1000;
@@ -49,6 +54,94 @@ function BookingCard({ text }: { text: string }) {
   );
 }
 
+const FILE_ACCEPT = ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp,.txt,.csv,.rtf,.zip,.rar,.7z";
+
+type Draft = {
+  key: string;
+  name: string;
+  kind: "image" | "video" | "file";
+  preview?: string;
+  state: "uploading" | "ready" | "error";
+  att?: Attachment;
+  error?: string;
+};
+
+function Attachments({ items, mine, onOpen, bare }: { items: Attachment[]; mine: boolean; onOpen: (a: Attachment) => void; bare?: boolean }) {
+  const visual = items.filter((a) => a.kind !== "file");
+  const files = items.filter((a) => a.kind === "file");
+  const single = visual.length === 1;
+  return (
+    <div className={`space-y-1.5 ${bare ? "" : "mb-1.5"}`}>
+      {visual.length > 0 && (
+        <div className={`grid gap-0.5 rounded-xl overflow-hidden ${single ? "grid-cols-1 w-[min(260px,68vw)]" : "grid-cols-2 w-[min(280px,70vw)]"}`}>
+          {visual.map((a, idx) => {
+            const wide = !single && visual.length % 2 === 1 && idx === visual.length - 1;
+            const ratio = wide ? 2 : single && a.width && a.height ? Math.min(Math.max(a.width / a.height, 0.75), 1.6) : 1;
+            const span = wide ? "col-span-2" : "";
+            if (a.status === "ready" && a.thumb_url) {
+              return (
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpen(a);
+                  }}
+                  className={`relative block bg-gray-200 ${span}`}
+                  style={{ aspectRatio: String(ratio) }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={mediaSrc(a.thumb_url)} alt="" loading="lazy" draggable={false} className="absolute inset-0 w-full h-full object-cover" />
+                  {a.kind === "video" && (
+                    <>
+                      <span className="absolute inset-0 flex items-center justify-center">
+                        <span className="w-11 h-11 rounded-full bg-black/55 text-white flex items-center justify-center">
+                          <Ico name="play" className="w-5 h-5" />
+                        </span>
+                      </span>
+                      <span className="absolute left-1.5 bottom-1.5 rounded bg-black/60 text-white text-[11px] px-1.5 py-0.5">{fmtDuration(a.duration_ms)}</span>
+                    </>
+                  )}
+                </button>
+              );
+            }
+            const failed = a.status === "failed";
+            return (
+              <div
+                key={a.id}
+                className={`flex flex-col items-center justify-center gap-1.5 text-center px-2 text-xs ${span} ${failed ? "bg-red-50 text-red-500" : "bg-gray-200 text-gray-500"}`}
+                style={{ aspectRatio: String(wide ? 2 : 1) }}
+              >
+                {!failed && <span className="w-6 h-6 rounded-full border-2 border-gray-300 border-t-brand-blue animate-spin" />}
+                {failed ? "Не удалось обработать видео" : "Обработка видео…"}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {files.map((a) => (
+        <a
+          key={a.id}
+          href={mediaSrc(a.url)}
+          target="_blank"
+          rel="noreferrer"
+          download={a.name ?? true}
+          onClick={(e) => e.stopPropagation()}
+          className={`flex items-center gap-2.5 rounded-xl px-2.5 py-2 min-w-[12rem] ${mine ? "bg-white/15" : "bg-gray-100"}`}
+        >
+          <span className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${mine ? "bg-white/20 text-white" : "bg-brand-blue/10 text-brand-blue"}`}>
+            <Ico name="file" className="w-5 h-5" />
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate max-w-[14rem] text-[13px] font-medium">{a.name}</span>
+            <span className="block text-[11px] opacity-70">{formatSize(a.size)}</span>
+          </span>
+        </a>
+      ))}
+    </div>
+  );
+}
+
 function MessageText({ text }: { text: string }) {
   return (
     <span className="whitespace-pre-wrap break-words">
@@ -72,9 +165,10 @@ type Props = {
   titleHref?: string;
   action?: React.ReactNode;
   emptyText?: string;
+  blockedText?: string | null;
 };
 
-export default function ChatThread({ convId, me, fetcher, socket, title, subtitle, onBack, titleHref, action, emptyText }: Props) {
+export default function ChatThread({ convId, me, fetcher, socket, title, subtitle, onBack, titleHref, action, emptyText, blockedText }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -91,6 +185,11 @@ export default function ChatThread({ convId, me, fetcher, socket, title, subtitl
   const [error, setError] = useState<string | null>(null);
   const [upcoming, setUpcoming] = useState<{ id: string; date: string; start_time: string; status: string }[]>([]);
   const [meId, setMeId] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<Draft[]>([]);
+  const [attachOpen, setAttachOpen] = useState(false);
+  const [viewer, setViewer] = useState<{ items: ViewerItem[]; start: number } | null>(null);
+  const mediaInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -126,6 +225,9 @@ export default function ChatThread({ convId, me, fetcher, socket, title, subtitl
     setFirstUnreadId(null);
     setTyping(false);
     setError(null);
+    setDrafts([]);
+    setAttachOpen(false);
+    setViewer(null);
     getMessages(fetcher, convId)
       .then((res) => {
         if (cancelled) return;
@@ -257,6 +359,16 @@ export default function ChatThread({ convId, me, fetcher, socket, title, subtitl
     }
   }, [messages]);
 
+  // меню скрепки закрывается по клику снаружи
+  useEffect(() => {
+    if (!attachOpen) return;
+    const f = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement).closest("[data-attach]")) setAttachOpen(false);
+    };
+    document.addEventListener("mousedown", f);
+    return () => document.removeEventListener("mousedown", f);
+  }, [attachOpen]);
+
   // высота поля ввода
   useEffect(() => {
     const ta = taRef.current;
@@ -322,7 +434,12 @@ export default function ChatThread({ convId, me, fetcher, socket, title, subtitl
       const res = await fetcher(`/chat/conversations/${convId}/messages`, {
         method: "POST",
         headers: JSON_HEADERS,
-        body: JSON.stringify({ text: tmp.text, reply_to_id: tmp.reply_to?.id ?? null, client_msg_id: tmp.client_msg_id }),
+        body: JSON.stringify({
+          text: tmp.text,
+          reply_to_id: tmp.reply_to?.id ?? null,
+          client_msg_id: tmp.client_msg_id,
+          attachment_ids: (tmp.attachments ?? []).map((a) => a.id),
+        }),
       });
       if (!res.ok) throw new Error();
       const m = (await res.json()) as ChatMessage;
@@ -332,9 +449,82 @@ export default function ChatThread({ convId, me, fetcher, socket, title, subtitl
     }
   }
 
+  async function uploadOne(file: File, key: string) {
+    try {
+      const r = await fetcher(`/chat/conversations/${convId}/attachments?name=${encodeURIComponent(file.name || "file")}`, {
+        method: "POST",
+        headers: { "Content-Type": file.type || "application/octet-stream" },
+        body: file,
+      });
+      const d = await r.json().catch(() => null);
+      if (!r.ok) throw new Error(typeof d?.detail === "string" ? d.detail : "Не удалось загрузить файл");
+      setDrafts((p) => p.map((x) => (x.key === key ? { ...x, state: "ready", att: d as Attachment } : x)));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Не удалось загрузить файл";
+      setError(msg);
+      setDrafts((p) => p.map((x) => (x.key === key ? { ...x, state: "error", error: msg } : x)));
+    }
+  }
+
+  function addFiles(list: FileList | File[]) {
+    const all = Array.from(list);
+    if (!all.length) return;
+    setError(null);
+    setAttachOpen(false);
+    const take = all.slice(0, Math.max(10 - drafts.length, 0));
+    if (all.length > take.length) setError("В одном сообщении не больше 10 файлов");
+    for (const f of take) {
+      const kind: Draft["kind"] = f.type.startsWith("image/") ? "image" : f.type.startsWith("video/") ? "video" : "file";
+      const limit = kind === "video" ? 100 : 25;
+      const key = newId();
+      if (f.size > limit * 1024 * 1024) {
+        setError(`Файл «${f.name}» больше ${limit} МБ`);
+        setDrafts((p) => [...p, { key, name: f.name, kind, state: "error", error: "Слишком большой файл" }]);
+        continue;
+      }
+      setDrafts((p) => [
+        ...p,
+        { key, name: f.name || "файл", kind, preview: kind !== "file" ? URL.createObjectURL(f) : undefined, state: "uploading" },
+      ]);
+      uploadOne(f, key);
+    }
+  }
+
+  function removeDraft(key: string) {
+    setDrafts((p) => {
+      const d = p.find((x) => x.key === key);
+      if (d?.preview) URL.revokeObjectURL(d.preview);
+      return p.filter((x) => x.key !== key);
+    });
+  }
+
+  function onPaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const fs = Array.from(e.clipboardData.files);
+    if (fs.length && !e.clipboardData.getData("text")) {
+      e.preventDefault();
+      addFiles(fs);
+    }
+  }
+
+  function openViewer(_m: ChatMessage, a: Attachment) {
+    // галерея всего диалога: листаем фото и видео из всех сообщений
+    const vis = messagesRef.current
+      .filter((x) => !x.deleted)
+      .flatMap((x) => x.attachments ?? [])
+      .filter((x) => x.kind !== "file" && x.status === "ready" && x.url);
+    const idx = vis.findIndex((x) => x.id === a.id);
+    if (idx < 0) return;
+    setViewer({
+      items: vis.map((x) => ({ kind: x.kind as "image" | "video", url: mediaSrc(x.url), poster: mediaSrc(x.thumb_url) })),
+      start: idx,
+    });
+  }
+
   async function submit() {
     const body = text.trim();
-    if (!body) return;
+    if (drafts.some((d) => d.state === "uploading")) return;
+    const ready = editing ? [] : drafts.filter((d) => d.state === "ready" && d.att).map((d) => d.att!);
+    if (!body && ready.length === 0) return;
     setError(null);
     setEmojiOpen(false);
     if (editing) {
@@ -365,11 +555,14 @@ export default function ChatThread({ convId, me, fetcher, socket, title, subtitl
       read: false,
       client_msg_id: cid,
       pending: true,
+      attachments: ready,
     };
     pendingScroll.current = "smooth";
     setMessages((p) => [...p, tmp]);
     setText("");
     setReplyTo(null);
+    drafts.forEach((d) => d.preview && URL.revokeObjectURL(d.preview));
+    setDrafts([]);
     deliver(tmp);
   }
 
@@ -474,9 +667,11 @@ export default function ChatThread({ convId, me, fetcher, socket, title, subtitl
       );
     }
     const mine = m.sender_role === me;
-    const canEdit = mine && !m.deleted && m.kind === "text" && Date.now() - new Date(m.created_at).getTime() < EDIT_MS;
+    const canEdit = mine && !m.deleted && m.kind === "text" && !m.attachments?.length && Date.now() - new Date(m.created_at).getTime() < EDIT_MS;
     const card = m.kind === "booking" && !m.deleted;
-    const big = !m.deleted && !m.reply_to && !!m.text && isEmojiOnly(m.text);
+    const big = !m.deleted && !m.reply_to && !!m.text && !m.attachments?.length && isEmojiOnly(m.text);
+    const mediaOnly = !m.deleted && !m.text && !m.reply_to && !card && !!m.attachments?.length && m.attachments.every((a) => a.kind !== "file");
+    const fileOnly = !m.deleted && !m.text && !m.reply_to && !card && !!m.attachments?.length && m.attachments.every((a) => a.kind === "file");
     const isLast = messages[messages.length - 1]?.id === m.id;
     const showActions = activeId === m.id && !m.deleted && !m.pending && !m.failed;
     const actions = showActions ? (
@@ -545,6 +740,10 @@ export default function ChatThread({ convId, me, fetcher, socket, title, subtitl
             className={`flow-root cursor-pointer ${
               big
                 ? "px-1 py-0.5"
+                : mediaOnly
+                ? "relative rounded-2xl overflow-hidden shadow-sm"
+                : fileOnly
+                ? "rounded-2xl px-2 py-2 text-sm shadow-sm bg-white text-gray-900 border border-gray-100"
                 : `rounded-2xl px-3.5 py-2 text-sm shadow-sm ${
                     card
                       ? "bg-white text-gray-900 border border-brand-yellow/70"
@@ -566,7 +765,7 @@ export default function ChatThread({ convId, me, fetcher, socket, title, subtitl
                 }`}
               >
                 <div className="font-medium">{who(m.reply_to.sender_role)}</div>
-                <div className="truncate">{m.reply_to.text ?? "Сообщение удалено"}</div>
+                <div className="truncate">{m.reply_to.text === null ? "Сообщение удалено" : m.reply_to.text || "📎 Вложение"}</div>
               </button>
             )}
             {m.deleted ? (
@@ -581,10 +780,17 @@ export default function ChatThread({ convId, me, fetcher, socket, title, subtitl
                     ))}
                 </span>
               ) : (
-                card ? <BookingCard text={m.text ?? ""} /> : <MessageText text={m.text ?? ""} />
+                card ? (
+                  <BookingCard text={m.text ?? ""} />
+                ) : (
+                  <>
+                    {!!m.attachments?.length && <Attachments items={m.attachments} mine={mine && !fileOnly} bare={mediaOnly} onOpen={(a) => openViewer(m, a)} />}
+                    {!!m.text && <MessageText text={m.text} />}
+                  </>
+                )
               )
             )}
-            <span className={`${big ? "flex justify-end mt-0.5" : "float-right ml-3 mt-1.5 inline-flex"} items-center gap-1 text-[11px] leading-none ${mine && !big && !card ? "text-white/70" : "text-gray-400"}`}>
+            <span className={`${big ? "flex justify-end mt-0.5" : mediaOnly ? "absolute bottom-1.5 right-1.5 inline-flex rounded-full bg-black/50 px-2 py-1" : "float-right ml-3 mt-1.5 inline-flex"} items-center gap-1 text-[11px] leading-none ${mediaOnly ? "text-white" : mine && !big && !card && !fileOnly ? "text-white/70" : "text-gray-400"}`}>
               {m.edited_at && !m.deleted && <span>изменено</span>}
               <span>{formatTime(m.created_at)}</span>
               {mine &&
@@ -594,7 +800,7 @@ export default function ChatThread({ convId, me, fetcher, socket, title, subtitl
                 ) : m.failed ? (
                   <span className="text-red-300 font-bold">!</span>
                 ) : (
-                  <Ico name={m.read ? "check-double" : "check"} className={`w-3.5 h-3.5 ${m.read ? (big || card ? "text-brand-blue" : "text-brand-yellow") : ""}`} />
+                  <Ico name={m.read ? "check-double" : "check"} className={`w-3.5 h-3.5 ${m.read ? (big || card || fileOnly ? "text-brand-blue" : "text-brand-yellow") : ""}`} />
                 ))}
             </span>
           </div>
@@ -646,7 +852,16 @@ export default function ChatThread({ convId, me, fetcher, socket, title, subtitl
   }, [messages, firstUnreadId, activeId, flashId, me, convId, fetcher, meId]);
 
   return (
-    <div className="flex flex-col h-full min-h-0 w-full bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+    <div
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => {
+        if (e.dataTransfer.files.length) {
+          e.preventDefault();
+          addFiles(e.dataTransfer.files);
+        }
+      }}
+      className="flex flex-col h-full min-h-0 w-full bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"
+    >
       <div className="flex items-center gap-3 px-3 sm:px-4 py-3 border-b border-gray-100 bg-white">
         {onBack && (
           <button type="button" onClick={onBack} aria-label="Назад" className="md:hidden -ml-1 p-1.5 rounded-lg text-gray-600 hover:bg-gray-100">
@@ -730,14 +945,100 @@ export default function ChatThread({ convId, me, fetcher, socket, title, subtitl
           </button>
         </div>
       )}
+      {drafts.length > 0 && (
+        <div className="flex gap-2 px-3 pt-3 border-t border-gray-100 bg-white overflow-x-auto">
+          {drafts.map((d) => (
+            <div key={d.key} className="relative flex-shrink-0 pt-1.5 pr-1.5">
+              <div
+                className={`relative w-16 h-16 rounded-xl overflow-hidden border flex items-center justify-center ${
+                  d.state === "error" ? "border-red-300 bg-red-50" : "border-gray-200 bg-gray-100"
+                }`}
+              >
+                {d.preview && d.kind === "image" ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={d.preview} alt="" className="w-full h-full object-cover" />
+                ) : d.preview && d.kind === "video" ? (
+                  <video src={d.preview + "#t=0.1"} muted playsInline preload="metadata" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="px-1 text-center">
+                    <Ico name="file" className="w-5 h-5 mx-auto text-gray-500" />
+                    <div className="text-[9px] leading-tight text-gray-500 truncate max-w-[56px]">{d.name}</div>
+                  </div>
+                )}
+                {d.state === "uploading" && (
+                  <span className="absolute inset-0 bg-white/60 flex items-center justify-center">
+                    <span className="w-5 h-5 rounded-full border-2 border-gray-300 border-t-brand-blue animate-spin" />
+                  </span>
+                )}
+                {d.state === "error" && <span className="absolute inset-0 flex items-center justify-center text-red-500 font-bold">!</span>}
+              </div>
+              <button
+                type="button"
+                onClick={() => removeDraft(d.key)}
+                aria-label="Убрать"
+                className="absolute top-0 right-0 w-5 h-5 rounded-full bg-gray-700 text-white flex items-center justify-center"
+              >
+                <Ico name="close" className="w-3 h-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
       {error && <div className="px-4 py-1.5 text-xs text-red-600 bg-red-50 border-t border-red-100">{error}</div>}
 
+      {blockedText ? (
+        <div className="px-4 py-3.5 border-t border-gray-100 bg-gray-50 text-center text-sm text-gray-500">{blockedText}</div>
+      ) : (
       <div className="relative flex items-end gap-2 p-3 border-t border-gray-100 bg-white">
         {emojiOpen && (
           <div className="absolute bottom-full left-3 mb-2 z-20">
             <EmojiPicker onPick={insertEmoji} onClose={() => setEmojiOpen(false)} />
           </div>
         )}
+        <div data-attach className="relative flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => setAttachOpen((v) => !v)}
+            aria-label="Прикрепить"
+            className={`w-11 h-11 rounded-full flex items-center justify-center transition ${
+              attachOpen ? "bg-brand-blue/10 text-brand-blue" : "text-gray-500 hover:bg-gray-100"
+            }`}
+          >
+            <Ico name="paperclip" className="w-6 h-6" />
+          </button>
+          {attachOpen && (
+            <div className="absolute bottom-full left-0 mb-2 z-20 w-56 rounded-2xl bg-white border border-gray-100 shadow-lg p-1.5">
+              <button type="button" onClick={() => mediaInputRef.current?.click()} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-gray-800 hover:bg-gray-50">
+                <Ico name="image" className="w-5 h-5 text-brand-blue" /> Фото или видео
+              </button>
+              <button type="button" onClick={() => fileInputRef.current?.click()} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-gray-800 hover:bg-gray-50">
+                <Ico name="file" className="w-5 h-5 text-brand-blue" /> Файл
+              </button>
+            </div>
+          )}
+        </div>
+        <input
+          ref={mediaInputRef}
+          type="file"
+          accept="image/*,video/*"
+          multiple
+          hidden
+          onChange={(e) => {
+            if (e.target.files) addFiles(e.target.files);
+            e.target.value = "";
+          }}
+        />
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept={FILE_ACCEPT}
+          multiple
+          hidden
+          onChange={(e) => {
+            if (e.target.files) addFiles(e.target.files);
+            e.target.value = "";
+          }}
+        />
         <button
           type="button"
           data-emoji-toggle
@@ -756,19 +1057,22 @@ export default function ChatThread({ convId, me, fetcher, socket, title, subtitl
           maxLength={4000}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={onKeyDown}
+          onPaste={onPaste}
           placeholder="Сообщение"
           className="flex-1 resize-none rounded-2xl bg-gray-100 px-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-brand-blue/30"
         />
         <button
           type="button"
           onClick={submit}
-          disabled={!text.trim()}
+          disabled={(!text.trim() && !drafts.some((d) => d.state === "ready")) || drafts.some((d) => d.state === "uploading")}
           aria-label="Отправить"
           className="w-11 h-11 rounded-full bg-brand-yellow text-brand-blue-dark flex items-center justify-center flex-shrink-0 transition hover:brightness-95 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <Ico name="send" className="w-5 h-5" />
         </button>
       </div>
+      )}
+      {viewer && <MediaViewer items={viewer.items} start={viewer.start} onClose={() => setViewer(null)} />}
     </div>
   );
 }

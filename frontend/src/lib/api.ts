@@ -670,6 +670,7 @@ export type ServiceProfile = {
   lng: number | null;
   logo_url: string | null;
   cover_url: string | null;
+  max_link: string | null;
   hero_title: string | null;
   stats: StatItem[];
   advantages: TextItem[];

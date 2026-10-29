@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { apiFetch } from "@/lib/auth";
-import { getMe } from "@/lib/api";
+import { getMe, getPublicProfile } from "@/lib/api";
 import { clientSocket } from "@/lib/chatSocket";
 import { useChatCounters } from "@/lib/useChatCounters";
 
@@ -36,6 +36,21 @@ function NavIcon({ src }: { src: string }) {
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [authed, setAuthed] = useState(false);
+
+  // запоминаем контакты сервиса для страницы «Нет интернета»
+  useEffect(() => {
+    getPublicProfile()
+      .then((d) => {
+        const p = d.profile;
+        try {
+          localStorage.setItem(
+            "ts_contacts",
+            JSON.stringify({ name: p.name, phone: p.phone, max_link: p.max_link, address: p.address, work_hours: p.work_hours })
+          );
+        } catch {}
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (authed) return;

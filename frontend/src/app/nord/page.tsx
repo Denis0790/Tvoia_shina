@@ -37,13 +37,13 @@ function Icon({ name, className = "w-4 h-4" }: { name: string; className?: strin
 }
 
 type Form = {
-  name: string; tagline: string; description: string; phone: string;
+  name: string; tagline: string; description: string; phone: string; max_link: string;
   address: string; work_hours: string; lat: string; lng: string;
 };
 
 function toForm(p: ServiceProfile): Form {
   return {
-    name: p.name, tagline: p.tagline ?? "", description: p.description ?? "", phone: p.phone ?? "",
+    name: p.name, tagline: p.tagline ?? "", description: p.description ?? "", phone: p.phone ?? "", max_link: p.max_link ?? "",
     address: p.address ?? "", work_hours: p.work_hours ?? "",
     lat: p.lat == null ? "" : String(p.lat), lng: p.lng == null ? "" : String(p.lng),
   };
@@ -163,7 +163,7 @@ export default function NordHomePage() {
     }
     await run(async () => {
       const p = await updateProfile({
-        name: form.name, tagline: form.tagline, description: form.description, phone: form.phone,
+        name: form.name, tagline: form.tagline, description: form.description, phone: form.phone, max_link: form.max_link,
         address: form.address, work_hours: form.work_hours, lat, lng,
       });
       setProfile(p);
@@ -358,6 +358,9 @@ export default function NordHomePage() {
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Телефон">
             <input className={inputCls} value={form.phone} onChange={set("phone")} maxLength={40} placeholder="+7 900 000-00-00" />
+          </Field>
+          <Field label="Ссылка на Max">
+            <input className={inputCls} value={form.max_link} onChange={set("max_link")} maxLength={300} placeholder="https://max.ru/..." />
           </Field>
           <Field label="Часы работы">
             <input className={inputCls} value={form.work_hours} onChange={set("work_hours")} maxLength={200} placeholder="Пн–Сб 9:00–19:00" />

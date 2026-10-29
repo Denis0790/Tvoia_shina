@@ -57,7 +57,7 @@ def _profile_dict(p: ServiceProfile) -> dict:
         k: getattr(p, k)
         for k in (
             "name", "tagline", "description", "phone", "address", "work_hours", "lat", "lng", "logo_url", "cover_url",
-            "hero_title", "stats", "advantages", "steps", "reviews",
+            "hero_title", "stats", "advantages", "steps", "reviews", "max_link",
         )
     }
 
@@ -120,6 +120,7 @@ class ProfileUpdate(BaseModel):
     tagline: str | None = Field(None, max_length=200)
     description: str | None = Field(None, max_length=3000)
     phone: str | None = Field(None, max_length=40)
+    max_link: str | None = Field(None, max_length=300)
     address: str | None = Field(None, max_length=200)
     work_hours: str | None = Field(None, max_length=200)
     lat: float | None = Field(None, ge=-90, le=90)
@@ -139,6 +140,8 @@ async def update_profile(payload: ProfileUpdate, manager: User = Depends(require
             value = value.strip() or None
         if key in LIST_FIELDS:
             value = value or []
+        if key == "max_link" and value and not value.lower().startswith(("https://", "http://")):
+            raise HTTPException(status_code=400, detail="Ссылка на Max должна начинаться с https://")
         if key == "name" and not value:
             raise HTTPException(status_code=400, detail="Название не может быть пустым")
         setattr(p, key, value)

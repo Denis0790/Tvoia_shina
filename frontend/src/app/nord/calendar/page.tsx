@@ -1550,13 +1550,13 @@ function CalendarPageInner() {
       ) : workingPosts.length === 0 ? (
         <p className="text-sm text-gray-400">В этот день нет рабочих постов</p>
       ) : (
-        <div className="bg-white rounded-2xl shadow-sm overflow-x-auto p-4">
+        <div className="bg-white rounded-2xl shadow-sm overflow-x-auto p-2 md:p-4">
           <div className="flex min-w-fit">
-            <div style={{ width: 52 }} className="shrink-0" />
+            <div className="shrink-0 w-10 md:w-[52px]" />
             {workingPosts.map((p) => (
               <div
                 key={p.post_id}
-                className="flex-1 min-w-[150px] text-xs text-gray-600 font-medium truncate px-1 pb-2"
+                className="flex-1 min-w-[100px] md:min-w-[150px] text-xs text-gray-600 font-medium truncate px-1 pb-2"
               >
                 {p.name}
                 {p.day_off && (
@@ -1569,7 +1569,7 @@ function CalendarPageInner() {
           </div>
 
           <div className="flex min-w-fit">
-            <div style={{ width: 52, height: totalHeight }} className="relative shrink-0">
+            <div style={{ height: totalHeight }} className="relative shrink-0 w-10 md:w-[52px]">
               {hourMarks.map((m) => (
                 <span
                   key={m}
@@ -1604,7 +1604,7 @@ function CalendarPageInner() {
               return (
                 <div
                   key={p.post_id}
-                  className="flex-1 min-w-[150px] relative border-l border-gray-100 px-1"
+                  className="flex-1 min-w-[100px] md:min-w-[150px] relative border-l border-gray-100 px-1"
                   style={{ height: totalHeight }}
                 >
                   {range.start > globalStart && (

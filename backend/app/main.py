@@ -68,6 +68,7 @@ async def lifespan(app: FastAPI):
         await conn.execute(text("ALTER TABLE service_profile ADD COLUMN IF NOT EXISTS advantages JSONB NOT NULL DEFAULT '[]'::jsonb"))
         await conn.execute(text("ALTER TABLE service_profile ADD COLUMN IF NOT EXISTS steps JSONB NOT NULL DEFAULT '[]'::jsonb"))
         await conn.execute(text("ALTER TABLE service_profile ADD COLUMN IF NOT EXISTS reviews JSONB NOT NULL DEFAULT '[]'::jsonb"))
+        await conn.execute(text("ALTER TABLE service_profile ADD COLUMN IF NOT EXISTS max_link VARCHAR(300)"))
         # слот уникален только среди активных записей (раньше отменённая запись блокировала то же время)
         await conn.execute(text("ALTER TABLE bookings DROP CONSTRAINT IF EXISTS uq_post_slot"))
         await conn.execute(

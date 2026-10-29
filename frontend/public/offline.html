@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#02167f">
+<title>Нет интернета — Твоя Шина</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:linear-gradient(135deg,#010d52,#02167f);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#fff}
+  .card{width:100%;max-width:420px;background:#f6f6f4;color:#1f2937;border-radius:20px;padding:28px 24px;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.3)}
+  .logo{width:56px;height:56px;margin:0 auto 16px;border-radius:14px;background:#ffd014;color:#010d52;font-weight:700;font-size:28px;display:flex;align-items:center;justify-content:center}
+  .badge{display:inline-block;background:#fee2e2;color:#b91c1c;font-size:13px;font-weight:600;border-radius:999px;padding:4px 12px;margin-bottom:12px}
+  h1{margin:0 0 8px;font-size:22px}
+  p{margin:0 0 16px;font-size:15px;line-height:1.45;color:#4b5563}
+  .info{font-size:14px;color:#374151;margin-bottom:6px;line-height:1.5}
+  .btn{display:block;width:100%;padding:14px;border-radius:14px;border:0;font-size:16px;font-weight:600;text-decoration:none;margin-top:10px;cursor:pointer;font-family:inherit}
+  .yellow{background:#ffd014;color:#010d52}
+  .blue{background:#02167f;color:#fff}
+  .ghost{background:#fff;color:#02167f;border:1px solid #d1d5db}
+  [hidden]{display:none!important}
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">Т</div>
+    <span class="badge">Нет интернета</span>
+    <h1>Связь пропала</h1>
+    <p>Онлайн-запись и чат сейчас недоступны. Позвоните нам или напишите в Max — или повторите, когда появится сеть.</p>
+    <div class="info">
+      <strong id="name" hidden></strong>
+      <div id="address" hidden></div>
+      <div id="hours" hidden></div>
+    </div>
+    <a id="call" class="btn yellow" hidden></a>
+    <a id="max" class="btn blue" target="_blank" rel="noreferrer" hidden>Написать в Max</a>
+    <button id="retry" class="btn ghost" type="button">Повторить</button>
+  </div>
+<script>
+(function () {
+  var c = {};
+  try { c = JSON.parse(localStorage.getItem("ts_contacts") || "{}") || {}; } catch (e) {}
+  function show(id, v) {
+    var el = document.getElementById(id);
+    if (v) { el.textContent = v; el.hidden = false; }
+  }
+  show("name", c.name);
+  show("address", c.address);
+  show("hours", c.work_hours ? "Часы работы: " + c.work_hours : "");
+  var tel = (c.phone || "").replace(/[^\d+]/g, "");
+  if (tel) {
+    var a = document.getElementById("call");
+    a.href = "tel:" + tel;
+    a.textContent = "Позвонить " + c.phone;
+    a.hidden = false;
+  }
+  if (c.max_link && /^https?:\/\//i.test(c.max_link)) {
+    var m = document.getElementById("max");
+    m.href = c.max_link;
+    m.hidden = false;
+  }
+  function back() { location.replace("/"); }
+  document.getElementById("retry").addEventListener("click", back);
+  window.addEventListener("online", back);
+})();
+</script>
+</body>
+</html>

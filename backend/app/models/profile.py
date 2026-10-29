@@ -16,6 +16,7 @@ class ServiceProfile(Base):
     tagline: Mapped[str | None] = mapped_column(String(200), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     phone: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    max_link: Mapped[str | None] = mapped_column(String(300), nullable=True)
     address: Mapped[str | None] = mapped_column(String(200), nullable=True)
     work_hours: Mapped[str | None] = mapped_column(String(200), nullable=True)
     lat: Mapped[float | None] = mapped_column(Float, nullable=True)

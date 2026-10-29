@@ -1003,7 +1003,7 @@ function ClientsPageInner() {
         </button>
       </div>
 
-      <div className="grid lg:grid-cols-[360px_minmax(0,1fr)] gap-4 items-start">
+      <div className="grid grid-cols-[minmax(0,1fr)] lg:grid-cols-[360px_minmax(0,1fr)] gap-4 items-start">
         {/* список */}
         <div className={`${selected ? "hidden lg:block" : ""} bg-white rounded-2xl shadow-sm p-3`}>
           <div className="relative">

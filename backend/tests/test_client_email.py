@@ -35,7 +35,7 @@ async def test_manager_attaches_email_and_client_claims_account(client, db_sessi
     # клиент подтверждает почту кодом и задаёт пароль (телефон не нужен: аккаунт уже есть)
     code = (await client.post("/auth/request-code", params={"email": "ivan@example.com"})).json()["debug_code"]
     ticket = (await client.post("/auth/verify-code", params={"email": "ivan@example.com", "code": code})).json()["ticket"]
-    r = await client.post("/auth/set-password", params={"ticket": ticket, "password": "pass1234"})
+    r = await client.post("/auth/set-password", params={"ticket": ticket, "password": "pass1234", "consent": True})
     assert r.status_code == 200
     me = (await client.get("/users/me", headers={"Authorization": f"Bearer {r.json()['access_token']}"})).json()
     assert me["id"] == str(walk_in.id)

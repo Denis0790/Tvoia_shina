@@ -22,9 +22,9 @@ export async function verifyCode(email: string, code: string): Promise<{ ticket:
   return res.json();
 }
 
-export async function setPassword(ticket: string, password: string, phone?: string) {
+export async function setPassword(ticket: string, password: string, phone?: string, consent = false) {
   const res = await fetch(
-    `${API_URL}/auth/set-password?ticket=${encodeURIComponent(ticket)}&password=${encodeURIComponent(password)}${
+    `${API_URL}/auth/set-password?ticket=${encodeURIComponent(ticket)}&password=${encodeURIComponent(password)}&consent=${consent}${
       phone ? `&phone=${encodeURIComponent(phone)}` : ""
     }`,
     { method: "POST", credentials: "include" }

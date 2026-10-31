@@ -12,7 +12,7 @@ async def _register(client, email, phone, password="pass1234"):
     params = {"ticket": ticket, "password": password}
     if phone is not None:
         params["phone"] = phone
-    return await client.post("/auth/set-password", params=params)
+    return await client.post("/auth/set-password", params={"consent": True, **params})
 
 
 @pytest.mark.asyncio

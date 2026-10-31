@@ -19,13 +19,13 @@ async def test_registration_and_login_cycle(client):
     assert r.status_code == 200
     ticket = r.json()["ticket"]
 
-    r = await client.post("/auth/set-password", params={"ticket": ticket, "password": "mypassword", "phone": phone})
+    r = await client.post("/auth/set-password", params={"ticket": ticket, "password": "mypassword", "phone": phone, "consent": True})
     assert r.status_code == 200
     assert "access_token" in r.json()
     assert "refresh_token" in r.cookies
 
     # Просроченный/использованный ticket больше не работает
-    r_reuse = await client.post("/auth/set-password", params={"ticket": ticket, "password": "another", "phone": phone})
+    r_reuse = await client.post("/auth/set-password", params={"ticket": ticket, "password": "another", "phone": phone, "consent": True})
     assert r_reuse.status_code == 400
 
     # Обычный вход по почте + паролю

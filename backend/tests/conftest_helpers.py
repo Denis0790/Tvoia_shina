@@ -13,5 +13,5 @@ async def register_and_login(client, phone: str, password: str = "test1234") -> 
     r = await client.post("/auth/verify-code", params={"email": email, "code": code})
     ticket = r.json()["ticket"]
 
-    r = await client.post("/auth/set-password", params={"ticket": ticket, "password": password, "phone": phone})
+    r = await client.post("/auth/set-password", params={"ticket": ticket, "password": password, "phone": phone, "consent": True})
     return r.json()["access_token"]

@@ -26,24 +26,29 @@ function formatPhone(d: string) {
 
 function Consent({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
-    <label className="flex items-start gap-2 text-left text-xs text-gray-500 mb-4 cursor-pointer">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        className="mt-0.5 w-4 h-4 shrink-0 accent-[#02167f]"
-      />
-      <span>
-        Даю{" "}
-        <a href="/consent" target="_blank" rel="noreferrer" className="text-brand-blue underline">
-          согласие на обработку персональных данных
-        </a>{" "}
-        и ознакомлен(а) с{" "}
+    <div className="text-left text-xs text-gray-500 mb-4">
+      <label className="flex items-start gap-2 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(e) => onChange(e.target.checked)}
+          className="mt-0.5 w-4 h-4 shrink-0 accent-[#02167f]"
+        />
+        <span>
+          Даю{" "}
+          <a href="/consent" target="_blank" rel="noreferrer" className="text-brand-blue underline">
+            согласие на обработку персональных данных
+          </a>
+        </span>
+      </label>
+      <p className="mt-1.5 pl-6">
+        Подробнее о том, как мы храним данные, — в{" "}
         <a href="/privacy" target="_blank" rel="noreferrer" className="text-brand-blue underline">
-          политикой
+          политике обработки персональных данных
         </a>
-      </span>
-    </label>
+        .
+      </p>
+    </div>
   );
 }
 
@@ -182,7 +187,7 @@ export default function LoginPage() {
       return;
     }
     try {
-      const data = await setPassword(ticket, newPassword, needPhone ? `+7${phoneDigits}` : undefined);
+      const data = await setPassword(ticket, newPassword, needPhone ? `+7${phoneDigits}` : undefined, agree);
       setAccessToken(data.access_token);
       window.location.href = "/";
     } catch (e: unknown) {

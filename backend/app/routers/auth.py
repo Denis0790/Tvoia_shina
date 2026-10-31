@@ -126,7 +126,13 @@ async def verify_code(email: str, code: str):
 
 @router.post("/set-password")
 async def set_password(
-    ticket: str, password: str, response: Response, phone: str | None = None, db: AsyncSession = Depends(get_db)
+    ticket: str,
+    password: str,
+    response: Response,
+    request: Request,
+    phone: str | None = None,
+    consent: bool = False,
+    db: AsyncSession = Depends(get_db),
 ):
     """По валидному ticket (почта подтверждена кодом) создаёт аккаунт или обновляет пароль.
     Для нового аккаунта обязателен телефон для связи (он не подтверждается, это просто контакт)."""
@@ -139,6 +145,11 @@ async def set_password(
 
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
+
+    # согласие на обработку ПДн: нужно новому клиенту и тому, кого завёл менеджер (согласия у него ещё нет)
+    needs_consent = user is None or user.consent_at is None
+    if needs_consent and not consent:
+        raise HTTPException(status_code=400, detail="Нужно согласие на обработку персональных данных")
 
     if user is None:
         if not phone or not phone.strip():
@@ -155,6 +166,15 @@ async def set_password(
         await db.flush()
     else:
         user.password_hash = hash_password(password)
+
+    if needs_consent:
+        from datetime import datetime, timezone
+
+        from app.legal import CONSENT_VERSION
+
+        user.consent_at = datetime.now(timezone.utc)
+        user.consent_version = CONSENT_VERSION
+        user.consent_ip = (_client_ip(request) or "")[:45]
 
     await consume_verification_ticket(ticket)
     return await _issue_tokens(user, response, db, CLIENT_COOKIE)

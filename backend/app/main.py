@@ -85,6 +85,9 @@ async def lifespan(app: FastAPI):
         await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS blocked BOOLEAN NOT NULL DEFAULT FALSE"))
         await conn.execute(text("ALTER TABLE conversations ADD COLUMN IF NOT EXISTS pinned BOOLEAN NOT NULL DEFAULT FALSE"))
         await conn.execute(text("ALTER TABLE conversations ADD COLUMN IF NOT EXISTS muted BOOLEAN NOT NULL DEFAULT FALSE"))
+        await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS consent_at TIMESTAMPTZ"))
+        await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS consent_version VARCHAR(20)"))
+        await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS consent_ip VARCHAR(45)"))
     cleanup_task = asyncio.create_task(_media_cleanup_loop())
     yield
     cleanup_task.cancel()

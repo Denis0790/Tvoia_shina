@@ -58,6 +58,7 @@ export default function LoginPage() {
   // единое поле: с «@» — почта клиента, иначе логин организации или менеджера
   const [ident, setIdent] = useState("");
   const [password, setPassword_] = useState("");
+  const [registering, setRegistering] = useState(false);
 
   const [code, setCode] = useState("");
   const [debugCode, setDebugCode] = useState("");
@@ -161,7 +162,7 @@ export default function LoginPage() {
     try {
       const data = await verifyCode(email, code.trim());
       setTicket(data.ticket);
-      setNeedPhone(notFound);
+      setNeedPhone(notFound || registering);
       setScreen("newPassword");
     } catch {
       setError("Неверный код");
@@ -218,11 +219,14 @@ export default function LoginPage() {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
+                if (registering) return;
                 handleLogin();
               }}
             >
-              <h1 className="text-lg font-bold text-gray-900">Вход</h1>
-              <p className="text-xs text-gray-500 mt-0.5 mb-6">Почта или логин организации и пароль</p>
+              <h1 className="text-lg font-bold text-gray-900">{registering ? "Регистрация" : "Вход"}</h1>
+              <p className="text-xs text-gray-500 mt-0.5 mb-6">
+                {registering ? "Введите почту, мы пришлём код подтверждения" : "Почта или логин организации и пароль"}
+              </p>
 
               <input
                 autoFocus
@@ -235,21 +239,37 @@ export default function LoginPage() {
                 inputMode={isEmail ? "email" : "text"}
                 className={`${inputCls} mb-3`}
               />
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword_(e.target.value)}
-                placeholder="Пароль"
-                className={`${inputCls} mb-5`}
-              />
+              {!registering && (
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword_(e.target.value)}
+                  placeholder="Пароль"
+                  className={`${inputCls} mb-5`}
+                />
+              )}
 
-              <button type="submit" disabled={busy} className={`${yellowBtn} disabled:opacity-60`}>
-                Войти
-              </button>
+              {registering ? (
+                <div className={isEmail ? "" : "mt-2"}>
+                  <Consent checked={agree} onChange={setAgree} />
+                  <button
+                    type="button"
+                    disabled={!isEmail || !agree || busy}
+                    onClick={handleSendCode}
+                    className={`${yellowBtn} disabled:opacity-60`}
+                  >
+                    Получить код
+                  </button>
+                </div>
+              ) : (
+                <button type="submit" disabled={busy} className={`${yellowBtn} disabled:opacity-60`}>
+                  Войти
+                </button>
+              )}
 
               {error && <p className="text-xs text-red-500 mt-3 text-center">{error}</p>}
 
-              {isEmail && (
+              {isEmail && !registering && (
                 <div className="mt-5 text-xs text-center">
                   {notFound ? (
                     <div>
@@ -270,6 +290,19 @@ export default function LoginPage() {
                   )}
                 </div>
               )}
+              <p className="mt-5 text-xs text-center text-gray-500">
+                {registering ? "Уже есть аккаунт?" : "Нет аккаунта?"}{" "}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRegistering(!registering);
+                    setError("");
+                  }}
+                  className="text-brand-blue font-medium"
+                >
+                  {registering ? "Войти" : "Зарегистрироваться"}
+                </button>
+              </p>
             </form>
           )}
 

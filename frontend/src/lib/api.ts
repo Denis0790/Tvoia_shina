@@ -72,6 +72,11 @@ export async function getMe(): Promise<Me | null> {
   return res.json();
 }
 
+export async function deleteMyAccount(): Promise<boolean> {
+  const res = await apiFetch("/users/me", { method: "DELETE" });
+  return res.ok;
+}
+
 export async function updateMyName(fullName: string): Promise<boolean> {
   const res = await apiFetch("/users/me/name", {
     method: "PUT",

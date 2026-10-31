@@ -268,3 +268,27 @@ async def client_bookings(
         }
         for b in result.scalars().all()
     ]
+
+
+@router.delete("/me")
+async def delete_my_account(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Клиент удаляет свой аккаунт: файлы чата стираются с диска, остальное (записи, авто, переписка, сессии) — каскадом в БД."""
+    from sqlalchemy import select
+
+    from app.models.chat import ChatAttachment, Conversation
+    from app.routers.chat import _delete_attachment_files
+
+    if user.role != "client" or user.kind != "person":
+        raise HTTPException(status_code=403, detail="Этот аккаунт удаляет сервис — обратитесь к менеджеру")
+    attachments = (
+        await db.execute(
+            select(ChatAttachment)
+            .join(Conversation, Conversation.id == ChatAttachment.conversation_id)
+            .where(Conversation.client_id == user.id)
+        )
+    ).scalars().all()
+    for a in attachments:
+        _delete_attachment_files(a)
+    await db.delete(user)
+    await db.commit()
+    return {"ok": True}

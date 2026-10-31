@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getCars, createCar, updateCar, deleteCar, getMe, updateMyName, logout, getCarHistory, type Car, type HistoryItem } from "@/lib/api";
+import { getCars, createCar, updateCar, deleteCar, getMe, updateMyName, logout, deleteMyAccount, getCarHistory, type Car, type HistoryItem } from "@/lib/api";
 import { setAccessToken } from "@/lib/auth";
 
 const inputCls =
@@ -46,6 +46,8 @@ export default function ProfilePage() {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState<string | null>(null);
   const [email, setEmail] = useState<string | null>(null);
+  const [confirmAccountDelete, setConfirmAccountDelete] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
   const [nameSaved, setNameSaved] = useState(true);
   const [nameLoading, setNameLoading] = useState(true);
   const [nameSaving, setNameSaving] = useState(false);
@@ -147,6 +149,19 @@ export default function ProfilePage() {
   }
 
   async function handleLogout() {
+    await logout();
+    setAccessToken(null);
+    window.location.href = "/";
+  }
+
+  async function handleDeleteAccount() {
+    setDeletingAccount(true);
+    const ok = await deleteMyAccount();
+    if (!ok) {
+      setDeletingAccount(false);
+      alert("Не удалось удалить аккаунт. Попробуйте ещё раз или позвоните нам.");
+      return;
+    }
     await logout();
     setAccessToken(null);
     window.location.href = "/";
@@ -315,6 +330,28 @@ export default function ProfilePage() {
         <button onClick={handleLogout} className="text-sm text-gray-500 hover:text-red-600 transition px-1">
           Выйти из аккаунта
         </button>
+        <div className="mt-3 px-1">
+          {confirmAccountDelete ? (
+            <div className="bg-white rounded-2xl p-4">
+              <p className="text-sm font-medium text-gray-900">Удалить аккаунт?</p>
+              <p className="text-xs text-gray-500 mt-1">
+                Будут удалены ваши данные: профиль, автомобили, записи и переписка с фото. Это нельзя отменить.
+              </p>
+              <div className="flex gap-4 mt-3 text-sm">
+                <button onClick={handleDeleteAccount} disabled={deletingAccount} className="font-medium text-red-600 disabled:opacity-50">
+                  Да, удалить
+                </button>
+                <button onClick={() => setConfirmAccountDelete(false)} className="text-gray-500">
+                  Отмена
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => setConfirmAccountDelete(true)} className="text-xs text-gray-400 hover:text-red-600 transition">
+              Удалить аккаунт и данные
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

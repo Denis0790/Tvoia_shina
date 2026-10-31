@@ -5,6 +5,7 @@ import { login, orgLogin, managerLogin, requestCode, verifyCode, setPassword } f
 import { setAccessToken } from "@/lib/auth";
 import { setManagerAccessToken } from "@/lib/managerAuth";
 import AutoBackdrop from "@/components/AutoBackdrop";
+import LegalFooter from "@/components/LegalFooter";
 
 type Screen = "login" | "code" | "newPassword";
 
@@ -23,13 +24,34 @@ function formatPhone(d: string) {
   return out;
 }
 
+function Consent({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <label className="flex items-start gap-2 text-left text-xs text-gray-500 mb-4 cursor-pointer">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="mt-0.5 w-4 h-4 shrink-0 accent-[#02167f]"
+      />
+      <span>
+        Даю{" "}
+        <a href="/consent" target="_blank" rel="noreferrer" className="text-brand-blue underline">
+          согласие на обработку персональных данных
+        </a>{" "}
+        и ознакомлен(а) с{" "}
+        <a href="/privacy" target="_blank" rel="noreferrer" className="text-brand-blue underline">
+          политикой
+        </a>
+      </span>
+    </label>
+  );
+}
+
 export default function LoginPage() {
   const [screen, setScreen] = useState<Screen>("login");
 
-  // единое поле: с цифры — телефон с маской, иначе логин организации
+  // единое поле: с «@» — почта клиента, иначе логин организации или менеджера
   const [ident, setIdent] = useState("");
-  const [phoneDigits, setPhoneDigits] = useState("");
-  const [phoneMode, setPhoneMode] = useState(false);
   const [password, setPassword_] = useState("");
 
   const [code, setCode] = useState("");
@@ -38,61 +60,44 @@ export default function LoginPage() {
 
   const [newPassword, setNewPassword] = useState("");
   const [newPassword2, setNewPassword2] = useState("");
+  const [phoneDigits, setPhoneDigits] = useState("");
+  const [needPhone, setNeedPhone] = useState(false);
 
   const [error, setError] = useState("");
   const [notFound, setNotFound] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [agree, setAgree] = useState(false);
 
-  const fullPhone = `+7${phoneDigits}`;
-  const display = phoneMode ? formatPhone(phoneDigits) : ident;
+  const isEmail = ident.includes("@");
+  const email = ident.trim().toLowerCase();
+  const phoneDisplay = phoneDigits ? formatPhone(phoneDigits) : "";
 
   function onIdentChange(raw: string) {
     setError("");
     setNotFound(false);
-    if (phoneMode || /^[+\d]/.test(raw)) {
-      let digits = raw.replace(/\D/g, "");
-      if (phoneMode) {
-        // стёрли знак маски — удаляем последнюю цифру, иначе курсор «залипает»
-        if (raw.length < display.length && digits.length === (phoneDigits.length ? phoneDigits.length + 1 : 0)) {
-          digits = digits.slice(0, -1);
-        }
-        digits = digits.replace(/^7/, "");
-      } else {
-        digits = digits.replace(/^[78]/, "");
-      }
-      digits = digits.slice(0, 10);
-      if (!digits && !/^[+\d]/.test(raw)) {
-        setPhoneMode(false);
-        setIdent("");
-        setPhoneDigits("");
-        return;
-      }
-      if (!digits && raw.length < display.length) {
-        setPhoneMode(false);
-        setIdent("");
-        setPhoneDigits("");
-        return;
-      }
-      setPhoneMode(true);
-      setPhoneDigits(digits);
-    } else {
-      setPhoneMode(false);
-      setPhoneDigits("");
-      setIdent(raw);
+    setIdent(raw);
+  }
+
+  function onPhoneChange(raw: string) {
+    let digits = raw.replace(/\D/g, "");
+    // стёрли знак маски — удаляем последнюю цифру, иначе курсор «залипает»
+    if (phoneDigits && raw.length < phoneDisplay.length && digits.length === phoneDigits.length + 1) {
+      digits = digits.slice(0, -1);
     }
+    setPhoneDigits(digits.replace(/^[78]/, "").slice(0, 10));
   }
 
   async function handleLogin() {
     setError("");
     setNotFound(false);
-    if (phoneMode ? phoneDigits.length < 10 : !ident.trim()) {
-      setError(phoneMode ? "Введите номер полностью" : "Введите телефон или логин");
+    if (!ident.trim()) {
+      setError("Введите почту или логин");
       return;
     }
     setBusy(true);
     try {
-      if (phoneMode) {
-        const data = await login(fullPhone, password);
+      if (isEmail) {
+        const data = await login(email, password);
         setAccessToken(data.access_token);
         window.location.href = "/";
         return;
@@ -116,9 +121,9 @@ export default function LoginPage() {
       }
     } catch (e: unknown) {
       const err = e as { status?: number; detail?: string };
-      if (phoneMode && err.status === 404) {
+      if (isEmail && err.status === 404) {
         setNotFound(true);
-        setError("Аккаунт с таким номером не найден");
+        setError("Аккаунт с такой почтой не найден");
       } else {
         setError(err.detail || "Неверный пароль");
       }
@@ -129,21 +134,29 @@ export default function LoginPage() {
 
   async function handleSendCode() {
     setError("");
+    if (!isEmail) {
+      setError("Введите адрес почты");
+      return;
+    }
+    setBusy(true);
     try {
-      const data = await requestCode(fullPhone);
-      setDebugCode(data.debug_code);
+      const data = await requestCode(email);
+      setDebugCode(data.debug_code ?? "");
       setScreen("code");
     } catch (e: unknown) {
       const err = e as Error;
-      setError(err.message || "Не удалось отправить код, проверьте номер");
+      setError(err.message || "Не удалось отправить код, проверьте адрес почты");
+    } finally {
+      setBusy(false);
     }
   }
 
   async function handleVerifyCode() {
     setError("");
     try {
-      const data = await verifyCode(fullPhone, code);
+      const data = await verifyCode(email, code.trim());
       setTicket(data.ticket);
+      setNeedPhone(notFound);
       setScreen("newPassword");
     } catch {
       setError("Неверный код");
@@ -160,13 +173,24 @@ export default function LoginPage() {
       setError("Пароли не совпадают");
       return;
     }
+    if (needPhone && phoneDigits.length < 10) {
+      setError("Введите телефон полностью");
+      return;
+    }
+    if (!agree) {
+      setError("Нужно согласие на обработку персональных данных");
+      return;
+    }
     try {
-      const data = await setPassword(ticket, newPassword);
+      const data = await setPassword(ticket, newPassword, needPhone ? `+7${phoneDigits}` : undefined);
       setAccessToken(data.access_token);
       window.location.href = "/";
     } catch (e: unknown) {
       const err = e as Error;
-      setError(err.message || "Не удалось сохранить пароль");
+      const msg = err.message || "Не удалось сохранить пароль";
+      // новый аккаунт без телефона (например, нажали «Забыли пароль» вместо регистрации) — просим телефон
+      if (msg.toLowerCase().includes("укажите номер")) setNeedPhone(true);
+      setError(msg);
     }
   }
 
@@ -193,18 +217,18 @@ export default function LoginPage() {
               }}
             >
               <h1 className="text-lg font-bold text-gray-900">Вход</h1>
-              <p className="text-xs text-gray-500 mt-0.5 mb-6">Телефон или логин организации и пароль</p>
+              <p className="text-xs text-gray-500 mt-0.5 mb-6">Почта или логин организации и пароль</p>
 
               <input
                 autoFocus
-                value={display}
+                value={ident}
                 onChange={(e) => onIdentChange(e.target.value)}
-                placeholder="Телефон или логин"
+                placeholder="Почта или логин"
                 autoCapitalize="none"
                 autoCorrect="off"
                 spellCheck={false}
-                inputMode={phoneMode ? "tel" : "text"}
-                className={`${inputCls} mb-3 ${phoneMode ? "tracking-wide" : ""}`}
+                inputMode={isEmail ? "email" : "text"}
+                className={`${inputCls} mb-3`}
               />
               <input
                 type="password"
@@ -220,12 +244,20 @@ export default function LoginPage() {
 
               {error && <p className="text-xs text-red-500 mt-3 text-center">{error}</p>}
 
-              {phoneMode && (
+              {isEmail && (
                 <div className="mt-5 text-xs text-center">
                   {notFound ? (
-                    <button type="button" onClick={handleSendCode} className="text-brand-blue font-medium">
-                      Зарегистрироваться
-                    </button>
+                    <div>
+                      <Consent checked={agree} onChange={setAgree} />
+                      <button
+                        type="button"
+                        disabled={!agree || busy}
+                        onClick={handleSendCode}
+                        className="text-brand-blue font-medium disabled:opacity-40"
+                      >
+                        Зарегистрироваться
+                      </button>
+                    </div>
                   ) : (
                     <button type="button" onClick={handleSendCode} className="text-gray-400 hover:text-gray-600">
                       Забыли пароль?
@@ -239,13 +271,18 @@ export default function LoginPage() {
           {screen === "code" && (
             <>
               <h1 className="text-lg font-bold text-gray-900">Подтверждение</h1>
-              <p className="text-xs text-gray-500 mt-0.5">Мы отправили код на {formatPhone(phoneDigits)}</p>
-              <p className="text-xs text-gray-400 mb-6">Тестовый режим: код — {debugCode}</p>
+              <p className="text-xs text-gray-500 mt-0.5">Мы отправили код на {email}</p>
+              {debugCode ? (
+                <p className="text-xs text-gray-400 mb-6">Тестовый режим: код — {debugCode}</p>
+              ) : (
+                <p className="text-xs text-gray-400 mb-6">Если письма нет, проверьте папку «Спам»</p>
+              )}
 
               <input
-                placeholder="Код из SMS"
+                placeholder="Код из письма"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
+                inputMode="numeric"
                 className={`${inputCls} mb-5 text-center tracking-widest text-lg`}
               />
               <button onClick={handleVerifyCode} className={yellowBtn}>
@@ -261,7 +298,7 @@ export default function LoginPage() {
           {screen === "newPassword" && (
             <>
               <h1 className="text-lg font-bold text-gray-900">Придумайте пароль</h1>
-              <p className="text-xs text-gray-500 mt-0.5 mb-6">Номер подтверждён, осталось задать пароль</p>
+              <p className="text-xs text-gray-500 mt-0.5 mb-6">Почта подтверждена, осталось задать пароль</p>
 
               <input
                 type="password"
@@ -275,8 +312,23 @@ export default function LoginPage() {
                 value={newPassword2}
                 onChange={(e) => setNewPassword2(e.target.value)}
                 placeholder="Повторите пароль"
-                className={`${inputCls} mb-5`}
+                className={`${inputCls} mb-3`}
               />
+              {needPhone && (
+                <>
+                  <input
+                    value={phoneDisplay}
+                    onChange={(e) => onPhoneChange(e.target.value)}
+                    placeholder="Телефон для связи"
+                    inputMode="tel"
+                    className={`${inputCls} mb-1`}
+                  />
+                  <p className="text-[11px] text-gray-400 mb-4">Нужен, чтобы сервис мог связаться с вами по записи</p>
+                </>
+              )}
+              <div className="mt-2">
+                <Consent checked={agree} onChange={setAgree} />
+              </div>
               <button onClick={handleSetPassword} className={yellowBtn}>
                 Готово
               </button>
@@ -284,6 +336,7 @@ export default function LoginPage() {
             </>
           )}
         </div>
+        <LegalFooter dark />
       </div>
     </main>
   );

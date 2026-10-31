@@ -1,0 +1,20 @@
+{
+    {$CADDY_GLOBAL}
+}
+
+{$DOMAIN} {
+    encode zstd gzip
+    header {
+        Strict-Transport-Security "max-age=31536000"
+        X-Content-Type-Options nosniff
+    }
+    reverse_proxy frontend:3000
+}
+
+api.{$DOMAIN} {
+    header {
+        Strict-Transport-Security "max-age=31536000"
+        X-Content-Type-Options nosniff
+    }
+    reverse_proxy backend:8000
+}

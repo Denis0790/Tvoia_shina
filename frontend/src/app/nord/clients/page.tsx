@@ -1,5 +1,7 @@
 "use client";
 
+import { setClientEmail } from "@/lib/api";
+
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -517,6 +519,75 @@ function CarCard({
   );
 }
 
+// привязанные в этой сессии почты (список клиентов сам не перечитывается)
+const savedEmails: Record<string, string> = {};
+
+function EmailRow({ clientId, email }: { clientId: string; email: string | null }) {
+  const current = savedEmails[clientId] ?? email;
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [, force] = useState(0);
+
+  async function save() {
+    setBusy(true);
+    setError("");
+    const res = await setClientEmail(clientId, draft.trim());
+    setBusy(false);
+    if (!res.ok) {
+      setError(res.error || "Не удалось сохранить");
+      return;
+    }
+    savedEmails[clientId] = draft.trim().toLowerCase();
+    setEditing(false);
+    force((n) => n + 1);
+  }
+
+  if (editing) {
+    return (
+      <div className="mt-3">
+        <input
+          autoFocus
+          type="email"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="Почта клиента"
+          autoCapitalize="none"
+          className={INPUT}
+        />
+        <p className="text-[11px] text-gray-400 mt-1">Клиент заходит в приложение по этой почте: «Забыли пароль?», код из письма, новый пароль.</p>
+        {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
+        <div className="flex gap-2 mt-2">
+          <button onClick={save} disabled={busy || !draft.trim()} className={`${BTN_PRIMARY} disabled:opacity-50`}>
+            Сохранить
+          </button>
+          <button onClick={() => setEditing(false)} className={BTN_GHOST}>
+            Отмена
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 flex items-center gap-2 text-xs text-gray-500 flex-wrap">
+      <span>Почта:</span>
+      {current ? <span className="text-gray-800 break-all">{current}</span> : <span className="text-gray-400">не привязана</span>}
+      <button
+        onClick={() => {
+          setDraft(current ?? "");
+          setError("");
+          setEditing(true);
+        }}
+        className="text-brand-blue font-medium hover:underline"
+      >
+        {current ? "Изменить" : "Привязать"}
+      </button>
+    </div>
+  );
+}
+
 function ClientDetail({
   client,
   data,
@@ -660,6 +731,8 @@ function ClientDetail({
             </Link>
           </div>
         </div>
+
+        {!isOrg && <EmailRow clientId={client.id} email={client.email ?? null} />}
 
         {isOrg && client.login && (
           <div className="mt-4 rounded-xl bg-gray-50 px-4 py-3 flex items-center gap-3 flex-wrap">

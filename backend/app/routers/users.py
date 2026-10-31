@@ -16,6 +16,7 @@ from app.database import get_db
 from app.deps import get_current_user, require_manager
 from app.models import User, Booking, Car, RefreshToken
 from app.security import hash_password
+from app.auth_utils import normalize_email
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -25,6 +26,7 @@ async def read_me(user: User = Depends(get_current_user)):
     return {
         "id": str(user.id),
         "phone": user.phone,
+        "email": user.email,
         "full_name": user.full_name,
         "role": user.role,
     }
@@ -54,7 +56,7 @@ async def list_clients(manager: User = Depends(require_manager), db: AsyncSessio
         select(User, func.count(Booking.id).label("bookings_count"))
         .outerjoin(Booking, (Booking.user_id == User.id) & (Booking.part == 0))
         # гости без телефона (запись «с улицы» без номера) в клиентах не показываем
-        .where(User.role == "client", or_(User.phone.is_not(None), User.kind == "org"))
+        .where(User.role == "client", or_(User.phone.is_not(None), User.email.is_not(None), User.kind == "org"))
         .group_by(User.id)
         .order_by(User.created_at.desc())
     )
@@ -78,6 +80,7 @@ async def list_clients(manager: User = Depends(require_manager), db: AsyncSessio
         {
             "id": str(user.id),
             "phone": user.phone,
+            "email": user.email,
             "full_name": user.full_name,
             "manager_note": user.manager_note,
             "kind": user.kind,
@@ -107,6 +110,29 @@ async def update_client_note(
     user.manager_note = payload.note
     await db.commit()
     return {"ok": True}
+
+
+class EmailIn(BaseModel):
+    email: str
+
+
+@router.put("/clients/{user_id}/email")
+async def set_client_email(
+    user_id: str, payload: EmailIn, manager: User = Depends(require_manager), db: AsyncSession = Depends(get_db)
+):
+    """Менеджер привязывает почту клиенту, которого завёл по телефону: клиент заходит по почте
+    («Забыли пароль?» → код → пароль) и видит свою историю записей."""
+    email = normalize_email(payload.email)
+    result = await db.execute(select(User).where(User.id == user_id, User.role == "client", User.kind == "person"))
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=404, detail="Клиент не найден")
+    taken = await db.execute(select(User.id).where(User.email == email, User.id != user.id))
+    if taken.first() is not None:
+        raise HTTPException(status_code=409, detail="Эта почта уже используется другим клиентом")
+    user.email = email
+    await db.commit()
+    return {"ok": True, "email": email}
 
 
 # Без похожих символов (0/o, 1/l/i), чтобы пароль легко диктовать и вводить

@@ -558,8 +558,28 @@ async def test_manual_booking_for_unregistered_client_then_claimed_on_registrati
     assert slot["booking"]["client_name"] == "Иван"
     assert slot["booking"]["car"]["vin"] == "XTA12345678901234"
 
-    # клиент позже регистрируется по этому же номеру — это тот же профиль, запись у него
-    client_token = await register_and_login(client, guest_phone)
+    # клиент позже пытается зарегистрироваться с этим же номером: сразу привязать нельзя (номер не подтверждается),
+    # его просят позвонить, а менеджер привязывает почту
+    from app.redis_client import redis_client
+
+    email = "guest-claim@example.com"
+    code = (await client.post("/auth/request-code", params={"email": email})).json()["debug_code"]
+    ticket = (await client.post("/auth/verify-code", params={"email": email, "code": code})).json()["ticket"]
+    r_reg = await client.post(
+        "/auth/set-password", params={"ticket": ticket, "password": "pass1234", "phone": guest_phone}
+    )
+    assert r_reg.status_code == 409
+
+    r_mail = await client.put(f"/users/clients/{guest_user_id}/email", json={"email": email}, headers=headers)
+    assert r_mail.status_code == 200
+
+    # после привязки почты клиент входит по коду и попадает в тот же профиль, запись у него
+    await redis_client.delete(f"otp_cooldown:{email}")
+    code = (await client.post("/auth/request-code", params={"email": email})).json()["debug_code"]
+    ticket = (await client.post("/auth/verify-code", params={"email": email, "code": code})).json()["ticket"]
+    r_pw = await client.post("/auth/set-password", params={"ticket": ticket, "password": "pass1234"})
+    assert r_pw.status_code == 200
+    client_token = r_pw.json()["access_token"]
     users = (await db_session.execute(select(User).where(User.phone == guest_phone))).scalars().all()
     assert len(users) == 1
     assert str(users[0].id) == guest_user_id

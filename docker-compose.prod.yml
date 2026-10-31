@@ -1,0 +1,92 @@
+# Боевой запуск: docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file: .env.prod
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    env_file: .env.prod
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "*", "--no-access-log"]
+    volumes:
+      - chat_media:/app/chat_media
+      - uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        NEXT_PUBLIC_API_URL: https://api.${DOMAIN}
+    restart: unless-stopped
+    environment:
+      - INTERNAL_API_URL=http://backend:8000
+    depends_on:
+      - backend
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      - DOMAIN=${DOMAIN}
+      - CADDY_GLOBAL=${CADDY_GLOBAL:-}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+      - backend
+
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file: .env.prod
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - pgbackups:/backups
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          f=/backups/db_$$(date +%Y%m%d_%H%M).sql
+          if PGPASSWORD="$$POSTGRES_PASSWORD" pg_dump -h db -U "$$POSTGRES_USER" "$$POSTGRES_DB" > "$$f"; then
+            gzip -f "$$f" && echo "backup ok: $$f.gz"
+          else
+            echo "BACKUP FAILED"; rm -f "$$f"
+          fi
+          find /backups -name 'db_*.sql.gz' -mtime +14 -delete
+          sleep 86400
+        done
+
+volumes:
+  pgdata:
+  chat_media:
+  uploads:
+  pgbackups:
+  caddy_data:
+  caddy_config:

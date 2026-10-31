@@ -45,6 +45,7 @@ function Card({
 export default function ProfilePage() {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState<string | null>(null);
+  const [email, setEmail] = useState<string | null>(null);
   const [nameSaved, setNameSaved] = useState(true);
   const [nameLoading, setNameLoading] = useState(true);
   const [nameSaving, setNameSaving] = useState(false);
@@ -76,6 +77,7 @@ export default function ProfilePage() {
     getMe().then((me) => {
       setName(me?.full_name || "");
       setPhone((me as { phone?: string | null } | null)?.phone ?? null);
+      setEmail(me?.email ?? null);
       setNameLoading(false);
     });
   }, []);
@@ -164,6 +166,11 @@ export default function ProfilePage() {
           <p className="text-sm text-gray-400">Загрузка…</p>
         ) : (
           <>
+            {email && (
+              <p className="text-sm text-gray-500 mb-1">
+                Почта: <span className="text-gray-900 break-all">{email}</span>
+              </p>
+            )}
             {phone && (
               <p className="text-sm text-gray-500 mb-3">
                 Телефон: <span className="text-gray-900">{phone}</span>

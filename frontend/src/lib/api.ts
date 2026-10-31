@@ -2,8 +2,8 @@ import { apiFetch } from "@/lib/auth";
 import { managerApiFetch } from "@/lib/managerAuth";
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-export async function requestCode(phone: string) {
-  const res = await fetch(`${API_URL}/auth/request-code?phone=${encodeURIComponent(phone)}`, {
+export async function requestCode(email: string) {
+  const res = await fetch(`${API_URL}/auth/request-code?email=${encodeURIComponent(email)}`, {
     method: "POST",
   });
   if (!res.ok) {
@@ -13,18 +13,20 @@ export async function requestCode(phone: string) {
   return res.json();
 }
 
-export async function verifyCode(phone: string, code: string): Promise<{ ticket: string }> {
+export async function verifyCode(email: string, code: string): Promise<{ ticket: string }> {
   const res = await fetch(
-    `${API_URL}/auth/verify-code?phone=${encodeURIComponent(phone)}&code=${encodeURIComponent(code)}`,
+    `${API_URL}/auth/verify-code?email=${encodeURIComponent(email)}&code=${encodeURIComponent(code)}`,
     { method: "POST" }
   );
   if (!res.ok) throw new Error("Неверный код");
   return res.json();
 }
 
-export async function setPassword(ticket: string, password: string) {
+export async function setPassword(ticket: string, password: string, phone?: string) {
   const res = await fetch(
-    `${API_URL}/auth/set-password?ticket=${encodeURIComponent(ticket)}&password=${encodeURIComponent(password)}`,
+    `${API_URL}/auth/set-password?ticket=${encodeURIComponent(ticket)}&password=${encodeURIComponent(password)}${
+      phone ? `&phone=${encodeURIComponent(phone)}` : ""
+    }`,
     { method: "POST", credentials: "include" }
   );
   if (!res.ok) {
@@ -34,9 +36,9 @@ export async function setPassword(ticket: string, password: string) {
   return res.json();
 }
 
-export async function login(phone: string, password: string) {
+export async function login(email: string, password: string) {
   const res = await fetch(
-    `${API_URL}/auth/login?phone=${encodeURIComponent(phone)}&password=${encodeURIComponent(password)}`,
+    `${API_URL}/auth/login?email=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}`,
     { method: "POST", credentials: "include" }
   );
   if (!res.ok) {
@@ -59,6 +61,7 @@ export async function logout() {
 export type Me = {
   id: string;
   phone: string | null;
+  email: string | null;
   full_name: string | null;
   role: string;
 };
@@ -470,6 +473,7 @@ export async function deleteScheduleExceptionPeriod(postId: string, dateFrom: st
 export type ClientCarSummary = { make: string; model: string; vin: string | null };
 
 export type ClientRow = {
+  email?: string | null;
   id: string;
   phone: string | null;
   full_name: string | null;
@@ -486,6 +490,17 @@ export async function getClients(): Promise<ClientRow[]> {
   const res = await managerApiFetch("/users/clients");
   if (!res.ok) return [];
   return res.json();
+}
+
+export async function setClientEmail(userId: string, email: string): Promise<{ ok: boolean; error?: string }> {
+  const res = await managerApiFetch(`/users/clients/${userId}/email`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  if (res.ok) return { ok: true };
+  const data = await res.json().catch(() => null);
+  return { ok: false, error: data?.detail || "Не удалось сохранить почту" };
 }
 
 export async function updateClientNote(userId: string, note: string) {

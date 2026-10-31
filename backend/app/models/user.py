@@ -18,6 +18,8 @@ class User(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     phone: Mapped[str | None] = mapped_column(String(20), unique=True, index=True, nullable=True)
     login: Mapped[str | None] = mapped_column(String(50), unique=True, index=True, nullable=True)
+    # почта клиента: по ней регистрация (код приходит письмом) и вход; всегда в нижнем регистре
+    email: Mapped[str | None] = mapped_column(String(254), unique=True, index=True, nullable=True)
     password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     full_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     role: Mapped[str] = mapped_column(String(20), default="client", server_default="client")

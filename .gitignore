@@ -23,3 +23,5 @@ backend/uploads/
 
 # закрытые файлы чата
 backend/chat_media/
+
+!.env.prod.example

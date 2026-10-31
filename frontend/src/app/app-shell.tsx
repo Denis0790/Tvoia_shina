@@ -7,6 +7,7 @@ import { apiFetch } from "@/lib/auth";
 import { getMe, getPublicProfile } from "@/lib/api";
 import { clientSocket } from "@/lib/chatSocket";
 import { useChatCounters } from "@/lib/useChatCounters";
+import LegalFooter from "@/components/LegalFooter";
 
 const NAV_ITEMS = [
   { href: "/", label: "Главная", icon: "/icons/home.svg" },
@@ -121,6 +122,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <div className="flex-1 min-w-0 flex flex-col pb-16 md:pb-0">
           <main className="flex-1 min-w-0 bg-[#f6f6f4] md:rounded-[12px]">
             <div className="mx-auto w-full p-6 md:p-10">{children}</div>
+            {(pathname === "/" || pathname === "/profile") && (
+              <div className="px-6 pb-6 md:px-10">
+                <LegalFooter />
+              </div>
+            )}
           </main>
         </div>
 

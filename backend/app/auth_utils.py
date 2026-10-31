@@ -30,6 +30,16 @@ def normalize_phone(phone: str) -> str:
     return "+" + digits
 
 
+def normalize_email(email: str) -> str:
+    """Почта в нижнем регистре без пробелов; бросает 400, если это не похоже на адрес."""
+    import re
+
+    value = (email or "").strip().lower()
+    if len(value) > 254 or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", value):
+        raise HTTPException(status_code=400, detail="Введите корректный адрес почты")
+    return value
+
+
 async def check_otp_rate_limit(phone: str, ip: str) -> None:
     """Защита от спама SMS-кодами: кулдаун между запросами на один номер,
     дневной лимит на номер, отдельный дневной лимит на IP (чтобы нельзя было
@@ -43,7 +53,7 @@ async def check_otp_rate_limit(phone: str, ip: str) -> None:
     if phone_count == 1:
         await redis_client.expire(phone_daily_key, 24 * 3600)
     if phone_count > 5:
-        raise HTTPException(status_code=429, detail="Слишком много попыток для этого номера, попробуйте завтра")
+        raise HTTPException(status_code=429, detail="Слишком много попыток для этого адреса, попробуйте завтра")
 
     ip_daily_key = f"otp_ip_daily:{ip}"
     ip_count = await redis_client.incr(ip_daily_key)
@@ -55,17 +65,49 @@ async def check_otp_rate_limit(phone: str, ip: str) -> None:
     await redis_client.set(cooldown_key, "1", ex=settings.otp_resend_seconds)
 
 
+LOGIN_FAIL_LIMIT = 10
+LOGIN_FAIL_WINDOW = 600  # секунд
+
+
+async def check_login_allowed(ip: str, ident: str) -> None:
+    """Блокировка подбора пароля: после 10 неудачных попыток с одного адреса на один логин — пауза 10 минут."""
+    n = await redis_client.get(f"login_fail:{ip}:{ident}")
+    if n is not None and int(n) >= LOGIN_FAIL_LIMIT:
+        raise HTTPException(status_code=429, detail="Слишком много неудачных попыток входа. Попробуйте через 10 минут")
+
+
+async def register_login_failure(ip: str, ident: str) -> None:
+    key = f"login_fail:{ip}:{ident}"
+    n = await redis_client.incr(key)
+    if n == 1:
+        await redis_client.expire(key, LOGIN_FAIL_WINDOW)
+
+
+async def clear_login_failures(ip: str, ident: str) -> None:
+    await redis_client.delete(f"login_fail:{ip}:{ident}")
+
+
 async def generate_and_store_otp(phone: str) -> str:
-    code = f"{random.randint(0, 999999):06d}"
+    code = f"{secrets.randbelow(1_000_000):06d}"
     await redis_client.set(f"otp:{phone}", code, ex=settings.otp_ttl_seconds)
+    await redis_client.delete(f"otp_fail:{phone}")
     return code
 
 
 async def check_otp(phone: str, code: str) -> bool:
+    """Проверка кода. После 5 неверных попыток код сгорает (защита от перебора)."""
     stored = await redis_client.get(f"otp:{phone}")
-    if stored is None or stored != code:
+    if stored is None:
+        return False
+    if stored != code:
+        fails = await redis_client.incr(f"otp_fail:{phone}")
+        if fails == 1:
+            await redis_client.expire(f"otp_fail:{phone}", 600)
+        if fails >= 5:
+            await redis_client.delete(f"otp:{phone}")
         return False
     await redis_client.delete(f"otp:{phone}")
+    await redis_client.delete(f"otp_fail:{phone}")
     return True
 
 

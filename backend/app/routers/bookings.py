@@ -149,7 +149,7 @@ async def search_clients_for_manual_booking(
         )
         match_cond = and_(
             User.role == "client",
-            or_(User.phone.is_not(None), User.kind == "org"),  # гости без телефона не ищутся
+            or_(User.phone.is_not(None), User.email.is_not(None), User.kind == "org"),  # гости без телефона и почты не ищутся
             or_(func.lower(User.full_name).contains(ql, autoescape=True), car_match),
         )
     else:
@@ -1270,7 +1270,7 @@ async def get_calendar(
                                 "post_id": str(booking.post_id),
                                 "client_name": user.full_name or user.phone,
                                 "phone": user.phone,
-                                "is_guest": user.phone is None and user.kind != "org",
+                                "is_guest": user.phone is None and user.email is None and user.kind != "org",
                                 "is_org": user.kind == "org",
                                 "start_time": booking.start_time,
                                 "duration_minutes": booking.duration_minutes,

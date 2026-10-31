@@ -4,7 +4,9 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Depends
 from fastapi.staticfiles import StaticFiles
+from app.config import api_docs_kwargs
 from fastapi.middleware.cors import CORSMiddleware
+from app.config import settings
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db, engine, Base
@@ -69,6 +71,8 @@ async def lifespan(app: FastAPI):
         await conn.execute(text("ALTER TABLE service_profile ADD COLUMN IF NOT EXISTS steps JSONB NOT NULL DEFAULT '[]'::jsonb"))
         await conn.execute(text("ALTER TABLE service_profile ADD COLUMN IF NOT EXISTS reviews JSONB NOT NULL DEFAULT '[]'::jsonb"))
         await conn.execute(text("ALTER TABLE service_profile ADD COLUMN IF NOT EXISTS max_link VARCHAR(300)"))
+        await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(254)"))
+        await conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_email ON users (email)"))
         # слот уникален только среди активных записей (раньше отменённая запись блокировала то же время)
         await conn.execute(text("ALTER TABLE bookings DROP CONSTRAINT IF EXISTS uq_post_slot"))
         await conn.execute(
@@ -86,11 +90,11 @@ async def lifespan(app: FastAPI):
     cleanup_task.cancel()
 
 
-app = FastAPI(title="Tvoya Shina API", lifespan=lifespan)
+app = FastAPI(title="Tvoya Shina API", lifespan=lifespan, **api_docs_kwargs(settings.app_env))
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=[o.strip() for o in settings.cors_origins.split(",") if o.strip()],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

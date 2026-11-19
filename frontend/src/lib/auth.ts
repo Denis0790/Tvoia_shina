@@ -17,7 +17,7 @@ export function setAccessToken(token: string | null) {
   }
 }
 
-export async function refreshAccessToken(): Promise<string | null> {
+async function doRefresh(): Promise<string | null> {
   try {
     const res = await fetch(`${API_URL}/auth/refresh`, {
       method: "POST",
@@ -34,6 +34,18 @@ export async function refreshAccessToken(): Promise<string | null> {
     setAccessToken(null);
     return null;
   }
+}
+
+let refreshing: Promise<string | null> | null = null;
+
+// одновременные вызовы делят один запрос: токен обновления одноразовый
+export function refreshAccessToken(): Promise<string | null> {
+  if (!refreshing) {
+    refreshing = doRefresh().finally(() => {
+      refreshing = null;
+    });
+  }
+  return refreshing;
 }
 
 export async function apiFetch(path: string, options: RequestInit = {}) {

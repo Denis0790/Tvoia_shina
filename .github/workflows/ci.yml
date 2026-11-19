@@ -33,7 +33,7 @@ jobs:
     env:
       DATABASE_URL: postgresql+asyncpg://test:test@localhost:5432/test
       REDIS_URL: redis://localhost:6379/0
-      JWT_SECRET: ci-only-secret-ci-only-secret-ci-only-secret
+      JWT_SECRET: ci-weak-secret
       OTP_DEBUG: "true"
     defaults:
       run:

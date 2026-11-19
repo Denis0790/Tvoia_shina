@@ -41,6 +41,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 CLIENT_COOKIE = "refresh_token"
 MANAGER_COOKIE = "manager_refresh_token"
+REFRESH_GRACE_SECONDS = 30  # столько секунд после обновления старый refresh-токен ещё принимается
 
 
 def _client_ip(request: Request) -> str:
@@ -66,14 +67,17 @@ async def _do_refresh(request: Request, response: Response, db: AsyncSession, co
     result = await db.execute(select(RefreshToken).where(RefreshToken.token_hash == token_hash))
     token_row = result.scalar_one_or_none()
 
-    if (
-        token_row is None
-        or token_row.revoked_at is not None
-        or token_row.expires_at < datetime.now(timezone.utc)
-    ):
+    now = datetime.now(timezone.utc)
+    if token_row is None or token_row.expires_at < now:
+        raise HTTPException(status_code=401, detail="Refresh token недействителен")
+    if token_row.revoked_at is not None:
+        # параллельные запросы (две вкладки, повторная загрузка): токен только что обновили —
+        # отдаём доступ без нового cookie, новый уже выдан первому запросу
+        if (now - token_row.revoked_at).total_seconds() <= REFRESH_GRACE_SECONDS:
+            return {"access_token": create_access_token(str(token_row.user_id))}
         raise HTTPException(status_code=401, detail="Refresh token недействителен")
 
-    token_row.revoked_at = datetime.now(timezone.utc)
+    token_row.revoked_at = now
 
     new_raw, new_hash, new_expires = generate_refresh_token()
     db.add(RefreshToken(user_id=token_row.user_id, token_hash=new_hash, expires_at=new_expires))

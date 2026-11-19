@@ -17,7 +17,7 @@ export function setManagerAccessToken(token: string | null) {
   }
 }
 
-export async function refreshManagerAccessToken(): Promise<string | null> {
+async function doManagerRefresh(): Promise<string | null> {
   try {
     const res = await fetch(`${API_URL}/auth/manager-refresh`, {
       method: "POST",
@@ -34,6 +34,18 @@ export async function refreshManagerAccessToken(): Promise<string | null> {
     setManagerAccessToken(null);
     return null;
   }
+}
+
+let refreshing: Promise<string | null> | null = null;
+
+// одновременные вызовы делят один запрос: токен обновления одноразовый
+export function refreshManagerAccessToken(): Promise<string | null> {
+  if (!refreshing) {
+    refreshing = doManagerRefresh().finally(() => {
+      refreshing = null;
+    });
+  }
+  return refreshing;
 }
 
 export async function managerApiFetch(path: string, options: RequestInit = {}) {

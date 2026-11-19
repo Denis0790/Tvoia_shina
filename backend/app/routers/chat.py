@@ -444,7 +444,7 @@ async def process_video_attachment(db: AsyncSession, att_id: uuid.UUID) -> None:
             dst = media.storage.path(main_key)
             await media.transcode_video(src, dst)
             out = await media.probe_video(dst)
-            media.storage.put(thumb_key, await media.make_poster(dst))
+            await asyncio.to_thread(media.storage.put, thumb_key, await media.make_poster(dst))
             att.status = "ready"
             att.main_key = main_key
             att.thumb_key = thumb_key
@@ -452,6 +452,7 @@ async def process_video_attachment(db: AsyncSession, att_id: uuid.UUID) -> None:
             att.width = out["width"]
             att.height = out["height"]
             att.duration_ms = int(out["duration"] * 1000)
+            await asyncio.to_thread(media.storage.publish, main_key)
         except media.MediaError as e:
             att.status = "failed"
             att.error = str(e)[:200]
@@ -541,8 +542,8 @@ async def upload_attachment(
             except media.MediaError as e:
                 raise _bad(e)
             main_key, thumb_key = f"{conv.id}/{att_id}.webp", f"{conv.id}/{att_id}_thumb.webp"
-            media.storage.put(main_key, result["main"])
-            media.storage.put(thumb_key, result["thumb"])
+            await asyncio.to_thread(media.storage.put, main_key, result["main"])
+            await asyncio.to_thread(media.storage.put, thumb_key, result["thumb"])
             att = ChatAttachment(
                 id=att_id, conversation_id=conv.id, uploader_id=user.id, kind="image", status="ready",
                 size_bytes=len(result["main"]), width=result["width"], height=result["height"],
@@ -557,7 +558,7 @@ async def upload_attachment(
             except media.MediaError as e:
                 raise _bad(e)
             main_key = f"{conv.id}/{att_id}.bin"
-            tmp.rename(media.storage.path(main_key))
+            await asyncio.to_thread(media.storage.put_file, main_key, tmp)
             att = ChatAttachment(
                 id=att_id, conversation_id=conv.id, uploader_id=user.id, kind="file", status="ready",
                 size_bytes=total, main_key=main_key, original_name=fname,
@@ -597,6 +598,17 @@ async def get_media(
         raise HTTPException(status_code=404, detail="Файл не найден")
     path = media.storage.path(key)
     if not path.exists():
+        if a.kind == "file":
+            s3_type = "application/octet-stream"
+            s3_disp = "attachment; filename*=UTF-8''" + quote(a.original_name or "file")
+        else:
+            s3_type = "video/mp4" if (a.kind == "video" and variant == "main") else "image/webp"
+            s3_disp = None
+        url = media.storage.presigned_url(key, s3_type, s3_disp)
+        if url:
+            from fastapi.responses import RedirectResponse
+
+            return RedirectResponse(url, status_code=302, headers={"Cache-Control": "private, max-age=1800"})
         raise HTTPException(status_code=404, detail="Файл не найден")
     if a.kind == "file":
         disp = {"Content-Disposition": "attachment; filename*=UTF-8''" + quote(a.original_name or "file"), "X-Content-Type-Options": "nosniff"}

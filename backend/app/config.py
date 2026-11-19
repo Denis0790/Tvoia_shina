@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     smtp_user: str = ""
     smtp_password: str = ""
     smtp_from: str = ""
+    # S3-хранилище файлов чата (Timeweb Cloud S3 и т. п.); пусто — файлы лежат на диске сервера
+    s3_endpoint: str = ""
+    s3_region: str = "ru-1"
+    s3_bucket: str = ""
+    s3_access_key: str = ""
+    s3_secret_key: str = ""
 
 
 def check_production(s: Settings) -> None:

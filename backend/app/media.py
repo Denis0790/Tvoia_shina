@@ -49,8 +49,97 @@ class LocalStorage:
         if key:
             self.path(key).unlink(missing_ok=True)
 
+    def put_file(self, key: str, src: Path) -> None:
+        """Готовый файл с рабочего места — на постоянное."""
+        dst = self.path(key)
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        src.rename(dst)
 
-storage = LocalStorage(Path(__file__).resolve().parents[1] / "chat_media")
+    def publish(self, key: str) -> None:
+        """Файл уже лежит на диске: без S3 так и остаётся (с S3 переезжает туда)."""
+
+    def presigned_url(self, key: str, content_type: str, disposition: str | None = None, expires: int = 3600) -> str | None:
+        return None
+
+
+_CTYPES = {"webp": "image/webp", "mp4": "video/mp4", "bin": "application/octet-stream"}
+
+
+def _ctype(key: str) -> str:
+    return _CTYPES.get(key.rsplit(".", 1)[-1], "application/octet-stream")
+
+
+class S3Storage(LocalStorage):
+    """Диск — рабочая папка (загрузка, исходники, перекодирование); готовые файлы лежат в S3.
+    Без клиента S3 ведёт себя как обычное локальное хранилище."""
+
+    def __init__(self, root: Path, client=None, bucket: str = ""):
+        super().__init__(root)
+        self._client = client
+        self._bucket = bucket
+
+    def put(self, key: str, data: bytes) -> None:
+        if self._client is None:
+            return super().put(key, data)
+        self._client.put_object(Bucket=self._bucket, Key=key, Body=data, ContentType=_ctype(key))
+
+    def put_file(self, key: str, src: Path) -> None:
+        if self._client is None:
+            return super().put_file(key, src)
+        self._client.upload_file(str(src), self._bucket, key, ExtraArgs={"ContentType": _ctype(key)})
+        src.unlink(missing_ok=True)
+
+    def publish(self, key: str) -> None:
+        if self._client is None:
+            return
+        p = self.path(key)
+        self._client.upload_file(str(p), self._bucket, key, ExtraArgs={"ContentType": _ctype(key)})
+        p.unlink(missing_ok=True)
+
+    def delete(self, key: str | None) -> None:
+        if not key:
+            return
+        super().delete(key)
+        if self._client is not None:
+            try:
+                self._client.delete_object(Bucket=self._bucket, Key=key)
+            except Exception:
+                import logging
+
+                logging.getLogger(__name__).exception("не удалось удалить файл из S3: %s", key)
+
+    def presigned_url(self, key: str, content_type: str, disposition: str | None = None, expires: int = 3600) -> str | None:
+        if self._client is None:
+            return None
+        params = {"Bucket": self._bucket, "Key": key, "ResponseContentType": content_type}
+        if disposition:
+            params["ResponseContentDisposition"] = disposition
+        return self._client.generate_presigned_url("get_object", Params=params, ExpiresIn=expires)
+
+
+def _make_client():
+    if not settings.s3_bucket:
+        return None
+    import boto3
+    from botocore.config import Config
+
+    return boto3.client(
+        "s3",
+        endpoint_url=settings.s3_endpoint,
+        region_name=settings.s3_region,
+        aws_access_key_id=settings.s3_access_key,
+        aws_secret_access_key=settings.s3_secret_key,
+        config=Config(
+            signature_version="s3v4",
+            s3={"addressing_style": "path"},
+            retries={"max_attempts": 3},
+            connect_timeout=5,
+            read_timeout=60,
+        ),
+    )
+
+
+storage = S3Storage(Path(__file__).resolve().parents[1] / "chat_media", _make_client(), settings.s3_bucket)
 
 
 # ---------- подписанные ссылки ----------

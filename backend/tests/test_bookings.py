@@ -1345,6 +1345,10 @@ async def test_slots_in_the_past_are_not_free(client, db_session):
 @pytest.mark.asyncio
 async def test_cannot_book_earlier_today_client_or_manager(client, db_session):
     from app.routers.bookings import _today_msk
+    from app.routers.bookings import _now_msk
+
+    if _now_msk().hour == 0 and _now_msk().minute < 30:
+        pytest.skip("первые полчаса суток: слот 00:00 ещё текущий")
 
     post = Post(name="Пост сегодня раньше", work_start="00:00", work_end="23:30", work_days="1111111")
     service = Service(name="Услуга сегодня раньше", duration_minutes=30)

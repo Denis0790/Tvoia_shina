@@ -5,6 +5,7 @@ import { login, orgLogin, managerLogin, requestCode, verifyCode, setPassword } f
 import { setAccessToken } from "@/lib/auth";
 import { setManagerAccessToken } from "@/lib/managerAuth";
 import AutoBackdrop from "@/components/AutoBackdrop";
+import ManagerAutoLogin from "@/components/ManagerAutoLogin";
 import LegalFooter from "@/components/LegalFooter";
 
 type Screen = "login" | "code" | "newPassword";
@@ -203,6 +204,7 @@ export default function LoginPage() {
   return (
     <main className="relative min-h-screen w-full overflow-hidden bg-gradient-to-br from-brand-blue-dark via-brand-blue to-brand-blue flex items-center justify-center p-6">
       <AutoBackdrop />
+      <ManagerAutoLogin />
       <div aria-hidden className="pointer-events-none absolute -top-32 -left-24 w-96 h-96 rounded-full bg-brand-yellow/10 blur-3xl" />
       <div aria-hidden className="pointer-events-none absolute -bottom-40 -right-24 w-[28rem] h-[28rem] rounded-full bg-white/10 blur-3xl" />
 

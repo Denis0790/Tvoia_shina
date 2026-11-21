@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { getCars, createCar, updateCar, deleteCar, getMe, updateMyName, logout, deleteMyAccount, getCarHistory, type Car, type HistoryItem } from "@/lib/api";
-import { setAccessToken } from "@/lib/auth";
+import { setAccessToken, apiFetch } from "@/lib/auth";
+import PushToggle from "@/components/PushToggle";
 
 const inputCls =
   "w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm bg-white focus:outline-none focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/15 transition";
@@ -207,6 +208,10 @@ export default function ProfilePage() {
             </div>
           </>
         )}
+      </Card>
+
+      <Card title="Уведомления">
+        <PushToggle fetcher={apiFetch} />
       </Card>
 
       <Card

@@ -19,7 +19,7 @@ from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app import media
+from app import media, push
 from app.database import get_db
 from app.deps import get_current_user, require_manager
 from app.models import Booking, User
@@ -192,6 +192,11 @@ async def post_booking_message(
             "manager_unread": counts[1],
         },
     )
+    first = lines[0] if lines else ""
+    if actor == "manager":
+        push.notify_users([client.id], title, first, "/messages", f"booking-{conv.id}")
+    else:
+        push.notify_managers(title, first, "/nord/calendar", "booking")
 
 
 class MessageIn(BaseModel):
@@ -805,6 +810,14 @@ async def send_message(
             "manager_unread": counts[1],
         },
     )
+    if side == "client":
+        if not conv.muted:
+            push.notify_managers(
+                "Новое сообщение", f"Клиент: {user.full_name or 'без имени'}",
+                f"/nord/chat?client={conv.client_id}", f"chat-{conv.id}",
+            )
+    else:
+        push.notify_users([conv.client_id], "Новое сообщение", "Сообщение от сервиса «Твоя Шина»", "/messages", f"chat-{conv.id}")
     return data
 
 

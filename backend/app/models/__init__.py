@@ -5,6 +5,7 @@ from app.models.service import Service
 from app.models.booking import Booking, booking_services
 from app.models.profile import ServiceProfile, ProfilePhoto, NewsItem
 from app.models.chat import Conversation, Message
+from app.models.push import PushSubscription
 
 __all__ = [
     "User",
@@ -21,4 +22,5 @@ __all__ = [
     "NewsItem",
     "Conversation",
     "Message",
+    "PushSubscription",
 ]

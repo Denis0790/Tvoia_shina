@@ -21,6 +21,7 @@ from app.routers.posts import router as posts_router
 from app.routers.profile import router as profile_router, UPLOAD_DIR
 from app.routers.chat import router as chat_router
 from app.routers.stats import router as stats_router
+from app.routers.push import router as push_router
 
 
 async def _media_cleanup_loop():
@@ -37,6 +38,22 @@ async def _media_cleanup_loop():
         except Exception:
             logging.getLogger(__name__).exception("очистка медиа чата не удалась")
         await asyncio.sleep(3600)
+
+
+async def _reminder_loop():
+    """Каждые 5 минут: напоминания о записях на завтра (push)."""
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+
+    from app.reminders import send_due_reminders
+
+    await asyncio.sleep(90)
+    while True:
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as db:
+                await send_due_reminders(db)
+        except Exception:
+            logging.getLogger(__name__).exception("напоминания о записях не отправлены")
+        await asyncio.sleep(300)
 
 
 @asynccontextmanager
@@ -88,9 +105,12 @@ async def lifespan(app: FastAPI):
         await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS consent_at TIMESTAMPTZ"))
         await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS consent_version VARCHAR(20)"))
         await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS consent_ip VARCHAR(45)"))
+        await conn.execute(text("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS reminder_sent_at TIMESTAMPTZ"))
     cleanup_task = asyncio.create_task(_media_cleanup_loop())
+    reminder_task = asyncio.create_task(_reminder_loop())
     yield
     cleanup_task.cancel()
+    reminder_task.cancel()
 
 
 app = FastAPI(title="Tvoya Shina API", lifespan=lifespan, **api_docs_kwargs(settings.app_env))
@@ -113,6 +133,7 @@ app.include_router(posts_router)
 app.include_router(profile_router)
 app.include_router(chat_router)
 app.include_router(stats_router)
+app.include_router(push_router)
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 

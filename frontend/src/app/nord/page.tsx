@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import PushToggle from "@/components/PushToggle";
+import { managerApiFetch } from "@/lib/managerAuth";
 import {
   getProfile, updateProfile, uploadProfileImage, deleteProfileImage, addProfilePhoto, deleteProfilePhoto,
   createNews, updateNews, uploadNewsImage, deleteNews, imageUrl,
@@ -278,6 +280,10 @@ export default function NordHomePage() {
           Как у клиента
         </a>
       </div>
+
+      <Card title="Уведомления">
+        <PushToggle fetcher={managerApiFetch} />
+      </Card>
 
       {/* 1. Карусель */}
       <Card

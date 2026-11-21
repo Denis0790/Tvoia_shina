@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     s3_bucket: str = ""
     s3_access_key: str = ""
     s3_secret_key: str = ""
+    vapid_public_key: str = ""
+    vapid_private_key: str = ""
+    vapid_subject: str = "mailto:support@sto-tyre4u.ru"
 
 
 def check_production(s: Settings) -> None:

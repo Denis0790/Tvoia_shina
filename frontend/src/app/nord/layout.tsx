@@ -94,9 +94,7 @@ export default function NordLayout({ children }: { children: React.ReactNode }) 
       <div className="relative w-full max-w-[1280px] flex md:pt-4 md:pb-4">
         <aside className="hidden md:flex w-56 flex-shrink-0 flex-col p-4 gap-1 md:sticky md:top-4 md:self-start">
           <div className="flex items-center gap-2 px-2 mb-8">
-            <div className="w-8 h-8 rounded-lg bg-brand-yellow flex items-center justify-center text-brand-blue-dark font-bold">
-              Т
-            </div>
+            <img src="/logo.png" alt="" className="w-9 h-9 object-contain" />
             <span className="font-semibold text-lg text-white">Твоя Шина</span>
           </div>
           {NAV_ITEMS.map((item) => {

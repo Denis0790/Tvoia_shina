@@ -209,9 +209,7 @@ export default function LoginPage() {
       <div className="relative w-full max-w-md">
         <div className="bg-white rounded-3xl p-8 md:p-10 shadow-2xl">
           <div className="flex items-center gap-3 mb-7">
-            <div className="w-10 h-10 rounded-xl bg-brand-yellow flex items-center justify-center text-brand-blue-dark font-bold text-lg">
-              Т
-            </div>
+            <img src="/logo.png" alt="" className="w-11 h-11 object-contain" />
             <span className="text-lg font-semibold text-gray-900">Твоя Шина</span>
           </div>
 

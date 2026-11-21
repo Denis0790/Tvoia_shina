@@ -1,11 +1,11 @@
 // Service worker «Твоя Шина»: кэш статики + страница «Нет интернета».
 // Запросы к API и сами страницы не кэшируются — данные всегда свежие.
-const STATIC = "static-v1";
+const STATIC = "static-v2";
 const OFFLINE_URL = "/offline.html";
 
 self.addEventListener("install", (e) => {
   e.waitUntil(
-    caches.open(STATIC).then((c) => c.addAll([OFFLINE_URL])).then(() => self.skipWaiting())
+    caches.open(STATIC).then((c) => c.addAll([OFFLINE_URL, "/logo.png"])).then(() => self.skipWaiting())
   );
 });
 
@@ -23,6 +23,11 @@ self.addEventListener("fetch", (e) => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
+
+  if (url.pathname === "/logo.png") {
+    e.respondWith(caches.match(req).then((r) => r || fetch(req)));
+    return;
+  }
 
   if (req.mode === "navigate") {
     e.respondWith(fetch(req).catch(() => caches.match(OFFLINE_URL)));

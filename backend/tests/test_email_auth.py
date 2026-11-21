@@ -68,7 +68,7 @@ async def test_code_goes_by_email_without_debug(client, monkeypatch):
     sent = []
     monkeypatch.setattr(settings, "otp_debug", False)
     monkeypatch.setattr(settings, "smtp_host", "smtp.test")
-    monkeypatch.setattr(mailer, "_send_sync", lambda to, subject, text: sent.append((to, subject, text)))
+    monkeypatch.setattr(mailer, "_send_sync", lambda to, subject, text, html=None: sent.append((to, subject, text)))
 
     r = await client.post("/auth/request-code", params={"email": "mailuser1@example.com"})
     assert r.status_code == 200

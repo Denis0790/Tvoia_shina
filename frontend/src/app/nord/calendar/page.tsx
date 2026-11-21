@@ -1257,7 +1257,7 @@ function CalendarPageInner() {
     const next = new Date(date);
     do {
       next.setDate(next.getDate() + delta);
-    } while ((next.getDay() === 6 && !weekend.sat) || (next.getDay() === 0 && !weekend.sun));
+    } while ((next.getDay() === 6 && !weekend?.sat) || (next.getDay() === 0 && !weekend?.sun));
     setDate(next);
   }
 

@@ -170,9 +170,9 @@ export default function ProfilePage() {
   const items = active ? history[active.id] : undefined;
 
   return (
-    <div className="-m-6 md:-m-10 p-6 md:p-10 md:rounded-[12px] bg-[#e8eaf0] min-h-[calc(100dvh-4rem)] md:min-h-[calc(100dvh-2rem)] space-y-4">
+    <div className="-m-6 md:-m-10 p-3 md:p-10 md:rounded-[12px] bg-[#e8eaf0] min-h-[calc(100dvh-4rem)] md:min-h-[calc(100dvh-2rem)] space-y-4">
       <div>
-        <h1 className="text-lg font-bold text-gray-900">Профиль</h1>
+        <h1 className="hidden md:block text-lg font-bold text-gray-900">Профиль</h1>
         <p className="text-xs text-gray-500 mt-0.5">Ваши данные и автомобили. Они подставляются в запись автоматически.</p>
       </div>
 

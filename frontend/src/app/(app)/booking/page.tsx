@@ -244,9 +244,9 @@ export default function BookingPage() {
   }
 
   return (
-    <div className="-m-6 md:-m-10 p-6 md:p-10 md:rounded-[12px] bg-[#e8eaf0] min-h-[calc(100dvh-4rem)] md:min-h-[calc(100dvh-2rem)] space-y-4">
+    <div className="-m-6 md:-m-10 p-3 md:p-10 md:rounded-[12px] bg-[#e8eaf0] min-h-[calc(100dvh-4rem)] md:min-h-[calc(100dvh-2rem)] space-y-4">
       <div>
-        <h1 className="text-lg font-bold text-gray-900">Запись на сервис</h1>
+        <h1 className="hidden md:block text-lg font-bold text-gray-900">Запись на сервис</h1>
         <p className="text-xs text-gray-500 mt-0.5">Выберите работы, затем удобное время — свободные окна подберём сами.</p>
       </div>
 

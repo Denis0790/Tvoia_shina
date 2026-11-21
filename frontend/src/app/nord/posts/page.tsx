@@ -502,9 +502,9 @@ export default function PostsPage() {
   if (loading) return <p className="text-sm text-gray-400">Загрузка…</p>;
 
   return (
-    <div className="-m-6 md:-m-10 p-6 md:p-10 md:rounded-[12px] bg-[#e8eaf0] min-h-[100dvh] md:min-h-[calc(100dvh-2rem)]">
+    <div className="-m-6 md:-m-10 p-3 md:p-10 md:rounded-[12px] bg-[#e8eaf0] min-h-[100dvh] md:min-h-[calc(100dvh-2rem)]">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-semibold text-gray-900">Посты</h1>
+        <h1 className="hidden md:block text-xl font-semibold text-gray-900">Посты</h1>
         <button
           onClick={() => setShowNewForm((v) => !v)}
           className="flex items-center gap-1.5 text-xs bg-brand-yellow text-brand-blue-dark font-medium rounded-lg px-3.5 py-2 hover:brightness-95 active:scale-[0.98] transition cursor-pointer"

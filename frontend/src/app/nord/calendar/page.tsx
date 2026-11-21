@@ -13,6 +13,7 @@ import {
   confirmBooking,
   declineBooking,
   rescheduleBooking,
+  changeBookingDuration,
   cancelBooking,
   movePendingBooking,
   createManualBooking,
@@ -94,6 +95,7 @@ function BookingPopover({
   onConfirm,
   onMoveOrReschedule,
   onCancelAction,
+  onDurationChange,
   onCopy,
 }: {
   booking: CalendarBooking;
@@ -104,6 +106,7 @@ function BookingPopover({
   onConfirm?: () => void;
   onMoveOrReschedule: () => void;
   onCancelAction: () => void;
+  onDurationChange?: (delta: number) => void;
   onCopy: (text: string) => void;
 }) {
   const duration = draftDuration ?? booking.duration_minutes;
@@ -259,6 +262,33 @@ function BookingPopover({
               +
             </button>
           </div>
+        </div>
+      )}
+
+      {status !== "pending" && onDurationChange && (
+        <div className="mt-2 pt-2 border-t border-gray-700 flex items-center gap-2">
+          <span className="text-gray-400">Время:</span>
+          <button
+            type="button"
+            disabled={duration <= 30}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDurationChange(-30);
+            }}
+            className="px-2.5 py-1 rounded bg-gray-800 text-gray-200 hover:bg-gray-700 disabled:opacity-40 cursor-pointer select-none"
+          >
+            −30 мин
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDurationChange(30);
+            }}
+            className="px-2.5 py-1 rounded bg-gray-800 text-gray-200 hover:bg-gray-700 cursor-pointer select-none"
+          >
+            +30 мин
+          </button>
         </div>
       )}
 
@@ -1223,6 +1253,14 @@ function CalendarPageInner() {
     setDate(next);
   }
 
+  function shiftDay(delta: number) {
+    const next = new Date(date);
+    do {
+      next.setDate(next.getDate() + delta);
+    } while ((next.getDay() === 6 && !weekend.sat) || (next.getDay() === 0 && !weekend.sun));
+    setDate(next);
+  }
+
   const monday = useMemo(() => {
     const d = new Date(date);
     const day = d.getDay();
@@ -1419,6 +1457,16 @@ function CalendarPageInner() {
     if (b) setNoteAsk({ kind: "decline", booking: b });
   }
 
+  async function handleDuration(id: string, delta: number) {
+    const ok = await changeBookingDuration(id, delta);
+    if (ok) {
+      setToast(delta > 0 ? "Время увеличено" : "Время уменьшено");
+      load();
+    } else {
+      alert("Не удалось изменить время — похоже, место занято");
+    }
+  }
+
   function handleCancelConfirmed(id: string) {
     const b = findBooking(id);
     if (b) setNoteAsk({ kind: "cancel", booking: b });
@@ -1442,8 +1490,8 @@ function CalendarPageInner() {
   }
 
   return (
-    <div className="-m-6 md:-m-10 p-6 md:p-10 md:rounded-[12px] bg-[#e8eaf0] min-h-[100dvh] md:min-h-[calc(100dvh-2rem)]">
-      <div className="flex items-center justify-between gap-3 mb-6">
+    <div className="-m-6 md:-m-10 p-3 md:p-10 md:rounded-[12px] bg-[#e8eaf0] min-h-[100dvh] md:min-h-[calc(100dvh-2rem)]">
+      <div className="hidden md:flex items-center justify-between gap-3 mb-6">
         <h1 className="text-xl font-semibold text-gray-900">Календарь</h1>
         <button
           type="button"
@@ -1455,7 +1503,35 @@ function CalendarPageInner() {
         </button>
       </div>
 
-      <div className="flex items-center gap-2 mb-2">
+      <div className="md:hidden flex items-center gap-2 mb-3">
+        <button
+          onClick={() => shiftDay(-1)}
+          aria-label="Предыдущий день"
+          className="w-11 h-11 rounded-xl bg-white shadow-sm text-gray-500 active:scale-95 flex items-center justify-center shrink-0 transition"
+        >
+          <Icon src="/icons/arrow-left.svg" className="w-4 h-4" />
+        </button>
+        <button
+          onClick={() => setDate(new Date())}
+          aria-label="Перейти на сегодня"
+          className="relative flex-1 h-11 rounded-xl bg-white shadow-sm text-sm font-semibold text-gray-900 capitalize"
+        >
+          {formatDateHuman(date)}
+          {(pendingDays[toISODate(date)] ?? 0) > 0 && (
+            <span className="absolute -top-1.5 -right-1.5 min-w-5 h-5 px-1 rounded-full bg-brand-yellow text-brand-blue-dark text-[11px] font-bold flex items-center justify-center shadow-sm">
+              {pendingDays[toISODate(date)]}
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => shiftDay(1)}
+          aria-label="Следующий день"
+          className="w-11 h-11 rounded-xl bg-white shadow-sm text-gray-500 active:scale-95 flex items-center justify-center shrink-0 transition"
+        >
+          <Icon src="/icons/arrow-right.svg" className="w-4 h-4" />
+        </button>
+      </div>
+      <div className="hidden md:flex items-center gap-2 mb-2">
         <button
           onClick={() => shiftWeek(-1)}
           aria-label="Предыдущая неделя"
@@ -1514,7 +1590,7 @@ function CalendarPageInner() {
           Сегодня
         </button>
       </div>
-      <p className="text-sm text-gray-500 mb-4 capitalize">{formatDateHuman(date)}</p>
+      <p className="hidden md:block text-sm text-gray-500 mb-4 capitalize">{formatDateHuman(date)}</p>
 
       <div className="flex items-center gap-4 mb-4">
         <div className="flex items-center gap-1.5">
@@ -1551,12 +1627,12 @@ function CalendarPageInner() {
         <p className="text-sm text-gray-400">В этот день нет рабочих постов</p>
       ) : (
         <div className="bg-white rounded-2xl shadow-sm overflow-x-auto p-2 md:p-4">
-          <div className="flex min-w-fit">
+          <div className="flex md:min-w-fit">
             <div className="shrink-0 w-10 md:w-[52px]" />
             {workingPosts.map((p) => (
               <div
                 key={p.post_id}
-                className="flex-1 min-w-[100px] md:min-w-[150px] text-xs text-gray-600 font-medium truncate px-1 pb-2"
+                className="flex-1 min-w-0 md:min-w-[150px] text-xs text-gray-600 font-medium truncate px-1 pb-2"
               >
                 {p.name}
                 {p.day_off && (
@@ -1568,7 +1644,7 @@ function CalendarPageInner() {
             ))}
           </div>
 
-          <div className="flex min-w-fit">
+          <div className="flex md:min-w-fit">
             <div style={{ height: totalHeight }} className="relative shrink-0 w-10 md:w-[52px]">
               {hourMarks.map((m) => (
                 <span
@@ -1604,7 +1680,7 @@ function CalendarPageInner() {
               return (
                 <div
                   key={p.post_id}
-                  className="flex-1 min-w-[100px] md:min-w-[150px] relative border-l border-gray-100 px-1"
+                  className="flex-1 min-w-0 md:min-w-[150px] relative border-l border-gray-100 px-1"
                   style={{ height: totalHeight }}
                 >
                   {range.start > globalStart && (
@@ -1744,6 +1820,7 @@ function CalendarPageInner() {
                           onCancelAction={() =>
                             isPending ? handleDeclinePending(booking.id) : handleCancelConfirmed(booking.id)
                           }
+                          onDurationChange={isPending ? undefined : (delta) => handleDuration(booking.id, delta)}
                           onCopy={copyText}
                         />
                       </div>

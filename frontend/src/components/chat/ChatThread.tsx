@@ -860,7 +860,7 @@ export default function ChatThread({ convId, me, fetcher, socket, title, subtitl
           addFiles(e.dataTransfer.files);
         }
       }}
-      className="flex flex-col h-full min-h-0 w-full bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"
+      className="flex flex-col h-full min-h-0 w-full bg-white md:rounded-2xl md:border md:border-gray-100 md:shadow-sm overflow-hidden"
     >
       <div className="flex items-center gap-3 px-3 sm:px-4 py-3 border-b border-gray-100 bg-white">
         {onBack && (

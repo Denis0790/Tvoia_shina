@@ -392,7 +392,7 @@ class BookingNote(BaseModel):
     comment: str | None = None
 
 
-async def _notify_booking(db: AsyncSession, kind: str, *, booking_id, actor: str, actor_user=None, note: str | None = None):
+async def _notify_booking(db: AsyncSession, kind: str, *, booking_id, actor: str, actor_user=None, note: str | None = None, extra: str | None = None):
     """Дублирует событие по записи карточкой в чат клиента. Сбой чата не ломает саму запись."""
     try:
         from app.models import booking_services
@@ -433,6 +433,7 @@ async def _notify_booking(db: AsyncSession, kind: str, *, booking_id, actor: str
             "declined": "Заявка отклонена",
             "cancelled": "Запись отменена",
             "moved": "Запись перенесена",
+            "duration": "Время записи изменено",
             "cancelled_by_client": "Запись отменена клиентом",
             "moved_by_client": "Запись перенесена клиентом — ждёт подтверждения",
         }
@@ -445,6 +446,8 @@ async def _notify_booking(db: AsyncSession, kind: str, *, booking_id, actor: str
             lines.append(f"Комментарий: {head.comment}")
         if note:
             lines.append(f"Комментарий сервиса: {note}")
+        if extra:
+            lines.append(extra)
         await post_booking_message(db, client, actor, actor_user, titles[kind], lines)
     except Exception:
         import logging
@@ -1066,13 +1069,14 @@ async def _booking_services(db: AsyncSession, booking_id: uuid.UUID):
 
 async def _move_group(
     db: AsyncSession, booking: Booking, post_id, target_date, start_time: str, statuses,
-    total: int | None = None, new_status: str | None = None,
+    total: int | None = None, new_status: str | None = None, check_past: bool = True,
 ):
     """Переносит запись (и всю её группу): продолжение пересчитывается заново."""
     if booking.part:
         raise HTTPException(status_code=409, detail="Перенесите первую часть записи — продолжение двигается вместе с ней")
     day = target_date.date() if isinstance(target_date, datetime) else target_date
-    _assert_not_past(day, _time_to_minutes(start_time))
+    if check_past:
+        _assert_not_past(day, _time_to_minutes(start_time))
 
     if booking.group_id is not None:
         rows_result = await db.execute(select(Booking).where(Booking.group_id == booking.group_id).order_by(Booking.part))
@@ -1300,3 +1304,60 @@ async def get_calendar(
         )
 
     return {"date": str(target_date), "posts": result_posts}
+
+
+class BookingDuration(BaseModel):
+    delta_minutes: int
+
+
+def _fmt_minutes(total: int) -> str:
+    h, m = divmod(total, 60)
+    if h and m:
+        return f"{h} ч {m} мин"
+    return f"{h} ч" if h else f"{m} мин"
+
+
+@router.post("/{booking_id}/duration")
+async def change_booking_duration(
+    booking_id: uuid.UUID,
+    payload: BookingDuration,
+    manager: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+):
+    """Добавить или убавить время у подтверждённой записи шагом по 30 минут.
+    Продолжение раскладывается заново, пересечения с соседними записями проверяются."""
+    delta = payload.delta_minutes
+    if delta == 0 or delta % 30 != 0 or abs(delta) > 240:
+        raise HTTPException(status_code=400, detail="Время меняется шагом по 30 минут")
+
+    result = await db.execute(select(Booking).where(Booking.id == booking_id).with_for_update())
+    booking = result.scalar_one_or_none()
+    if booking is None or booking.status != "confirmed":
+        raise HTTPException(status_code=409, detail="Запись не найдена или не подтверждена")
+    if booking.part:
+        head_result = await db.execute(
+            select(Booking).where(Booking.group_id == booking.group_id, Booking.part == 0).with_for_update()
+        )
+        booking = head_result.scalar_one_or_none()
+        if booking is None:
+            raise HTTPException(status_code=409, detail="Запись не найдена")
+
+    if booking.group_id is not None:
+        rows_result = await db.execute(select(Booking).where(Booking.group_id == booking.group_id))
+        total = sum(r.duration_minutes for r in rows_result.scalars().all())
+    else:
+        total = booking.duration_minutes
+
+    new_total = total + delta
+    if not 15 <= new_total <= MANUAL_MAX_MINUTES:
+        raise HTTPException(status_code=400, detail="Длительность должна быть от 15 минут до 80 часов")
+
+    await _move_group(
+        db, booking, booking.post_id, booking.date, booking.start_time,
+        statuses=("confirmed",), total=new_total, check_past=False,
+    )
+    await _notify_booking(
+        db, "duration", booking_id=booking.id, actor="manager", actor_user=manager,
+        extra=f"Длительность: {_fmt_minutes(new_total)}",
+    )
+    return {"ok": True, "duration_minutes": new_total}

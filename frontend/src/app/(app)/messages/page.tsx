@@ -34,8 +34,8 @@ export default function MessagesPage() {
   }, [convId]);
 
   return (
-    <div className="-m-6 md:-m-10 p-6 md:p-10 md:rounded-[12px] bg-[#e8eaf0] h-[calc(100dvh-4rem)] md:h-[calc(100dvh-2rem)] flex flex-col gap-4">
-      <div>
+    <div className="-m-6 md:-m-10 p-0 md:p-10 md:rounded-[12px] bg-[#e8eaf0] h-[calc(100dvh-4rem)] md:h-[calc(100dvh-2rem)] flex flex-col md:gap-4">
+      <div className="hidden md:block">
         <h1 className="text-lg font-bold text-gray-900">Сообщения</h1>
         <p className="text-xs text-gray-500 mt-0.5">Напишите нам — ответим в рабочее время</p>
       </div>

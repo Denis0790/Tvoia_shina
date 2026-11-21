@@ -208,9 +208,9 @@ export default function NordServicesPage() {
   if (!items) return <div className="p-6 text-sm text-gray-500">Загрузка…</div>;
 
   return (
-    <div className="-m-6 md:-m-10 p-6 md:p-10 min-h-[100dvh] md:min-h-[calc(100dvh-2rem)] md:rounded-[12px] bg-[#e8eaf0] space-y-4">
+    <div className="-m-6 md:-m-10 p-3 md:p-10 min-h-[100dvh] md:min-h-[calc(100dvh-2rem)] md:rounded-[12px] bg-[#e8eaf0] space-y-4">
       <div>
-        <h1 className="text-lg font-bold text-gray-900">Услуги и нормативы</h1>
+        <h1 className="hidden md:block text-lg font-bold text-gray-900">Услуги и нормативы</h1>
         <p className="text-xs text-gray-500 mt-0.5">
           Норматив — сколько времени занимает услуга. Эти услуги подсказываются при записи и у менеджера, и у клиента.
         </p>

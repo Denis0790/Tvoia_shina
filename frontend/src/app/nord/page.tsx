@@ -268,10 +268,10 @@ export default function NordHomePage() {
     setForm((f) => (f ? { ...f, [k]: e.target.value } : f));
 
   return (
-    <div className="-m-6 md:-m-10 p-6 md:p-10 md:rounded-[12px] bg-[#e8eaf0] min-h-[100dvh] md:min-h-[calc(100dvh-2rem)] space-y-4">
+    <div className="-m-6 md:-m-10 p-3 md:p-10 md:rounded-[12px] bg-[#e8eaf0] min-h-[100dvh] md:min-h-[calc(100dvh-2rem)] space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-lg font-bold text-gray-900">Главная</h1>
+          <h1 className="hidden md:block text-lg font-bold text-gray-900">Главная</h1>
           <p className="text-xs text-gray-500 mt-0.5">Так ваш сервис увидят клиенты. Блоки идут в том же порядке, что и на странице.</p>
         </div>
         <a href="/" target="_blank" rel="noreferrer" className={`${ghostBtn} whitespace-nowrap`}>
@@ -312,30 +312,8 @@ export default function NordHomePage() {
       </Card>
 
       {/* 2. Визитка */}
-      <Card title="Название и логотип">
+      <Card title="Название">
         <div className="flex flex-col sm:flex-row gap-5">
-          <div className="flex sm:flex-col items-center gap-3 flex-shrink-0">
-            <div className="w-20 h-20 rounded-full bg-brand-blue/10 overflow-hidden flex items-center justify-center text-brand-blue border border-gray-100">
-              {profile.logo_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={imageUrl(profile.logo_url) ?? ""} alt="" className="w-full h-full object-cover" />
-              ) : (
-                <Icon name="home" className="w-8 h-8" />
-              )}
-            </div>
-            <div className="flex sm:flex-col items-center gap-2">
-              <label className={ghostBtn}>
-                <Icon name="edit" />
-                {profile.logo_url ? "Сменить" : "Загрузить"}
-                <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={busy} onChange={onLogoUpload} />
-              </label>
-              {profile.logo_url && (
-                <button type="button" className="text-xs text-gray-500 hover:text-red-600" disabled={busy} onClick={onLogoDelete}>
-                  Убрать
-                </button>
-              )}
-            </div>
-          </div>
           <div className="flex-1 grid gap-3">
             <Field label="Название">
               <input className={inputCls} value={form.name} onChange={set("name")} maxLength={120} />

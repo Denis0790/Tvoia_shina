@@ -1623,3 +1623,44 @@ async def test_slots_can_exclude_own_booking(client, db_session):
         await client.get("/availability/slots", params={"target_date": str(day), "exclude_booking_id": bid})
     )
     assert own["10:00"] is True and own["10:30"] is True
+
+
+@pytest.mark.asyncio
+async def test_change_booking_duration(client, db_session):
+    headers = await _manual_manager_headers(client, db_session, "+79165559931")
+    post = Post(name="Пост длительность", work_start="09:00", work_end="18:00", work_days="1111111")
+    db_session.add(post)
+    await db_session.flush()
+
+    day = date.today() + timedelta(days=29)
+    r1 = await client.post(
+        "/bookings/manual",
+        json={"post_id": str(post.id), "date": str(day), "start_time": "10:00", "duration_minutes": 60, "phone": "+79165559932"},
+        headers=headers,
+    )
+    assert r1.status_code == 200
+    r2 = await client.post(
+        "/bookings/manual",
+        json={"post_id": str(post.id), "date": str(day), "start_time": "11:30", "duration_minutes": 60, "phone": "+79165559933"},
+        headers=headers,
+    )
+    assert r2.status_code == 200
+    bid = r1.json()["id"]
+
+    # +30 мин: до 11:30 свободно
+    r = await client.post(f"/bookings/{bid}/duration", json={"delta_minutes": 30}, headers=headers)
+    assert r.status_code == 200
+    assert r.json()["duration_minutes"] == 90
+    # ещё +30 упирается в следующую запись
+    r = await client.post(f"/bookings/{bid}/duration", json={"delta_minutes": 30}, headers=headers)
+    assert r.status_code == 409
+    # убавить можно
+    r = await client.post(f"/bookings/{bid}/duration", json={"delta_minutes": -30}, headers=headers)
+    assert r.status_code == 200
+    assert r.json()["duration_minutes"] == 60
+    # шаг не по 30 минут
+    r = await client.post(f"/bookings/{bid}/duration", json={"delta_minutes": 20}, headers=headers)
+    assert r.status_code == 400
+    # короче 15 минут нельзя
+    r = await client.post(f"/bookings/{bid}/duration", json={"delta_minutes": -60}, headers=headers)
+    assert r.status_code == 400

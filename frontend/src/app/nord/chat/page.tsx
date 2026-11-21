@@ -151,13 +151,13 @@ function ChatInner() {
   }, [clientParam]);
 
   return (
-    <div className="-m-6 md:-m-10 p-6 md:p-10 md:rounded-[12px] bg-[#e8eaf0] h-[calc(100dvh_-_4rem_-_env(safe-area-inset-bottom))] md:h-[calc(100dvh-2rem)] flex flex-col gap-4">
-      <div>
+    <div className="-m-6 md:-m-10 p-0 md:p-10 md:rounded-[12px] bg-[#e8eaf0] h-[calc(100dvh_-_4rem_-_env(safe-area-inset-bottom))] md:h-[calc(100dvh-2rem)] flex flex-col md:gap-4">
+      <div className="hidden md:block">
         <h1 className="text-lg font-bold text-gray-900">Чат</h1>
         <p className="text-xs text-gray-500 mt-0.5">Переписка с клиентами</p>
       </div>
-      <div className="flex-1 min-h-0 grid grid-cols-[minmax(0,1fr)] md:grid-cols-[320px_minmax(0,1fr)] gap-4">
-        <div className={`${active ? "hidden md:flex" : "flex"} flex-col min-h-0 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden`}>
+      <div className="flex-1 min-h-0 grid grid-cols-[minmax(0,1fr)] md:grid-cols-[320px_minmax(0,1fr)] md:gap-4">
+        <div className={`${active ? "hidden md:flex" : "flex"} flex-col min-h-0 bg-white md:rounded-2xl md:border md:border-gray-100 md:shadow-sm overflow-hidden`}>
           <div className="p-3 border-b border-gray-100">
             <div className="flex items-center gap-2 rounded-xl bg-gray-100 px-3">
               <Ico name="search" className="w-4 h-4 text-gray-400" />

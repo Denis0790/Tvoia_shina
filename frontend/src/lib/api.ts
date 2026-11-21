@@ -859,3 +859,12 @@ export async function getStats(q: {
   }
   return { ok: true, data: await res.json() };
 }
+
+export async function changeBookingDuration(id: string, deltaMinutes: number) {
+  const res = await managerApiFetch(`/bookings/${id}/duration`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ delta_minutes: deltaMinutes }),
+  });
+  return res.ok;
+}

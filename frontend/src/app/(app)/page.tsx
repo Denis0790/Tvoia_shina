@@ -223,22 +223,14 @@ export default function Home() {
   const hasMap = profile.lat != null && profile.lng != null;
 
   return (
-    <div className="-m-6 md:-m-10 p-6 md:p-10 md:rounded-[12px] bg-[#e8eaf0] min-h-[calc(100dvh-4rem)] md:min-h-[calc(100dvh-2rem)] space-y-4">
-      <h1 className="text-lg font-bold text-gray-900">Главная</h1>
+    <div className="-m-6 md:-m-10 p-3 md:p-10 md:rounded-[12px] bg-[#e8eaf0] min-h-[calc(100dvh-4rem)] md:min-h-[calc(100dvh-2rem)] space-y-4">
+      <h1 className="hidden md:block text-lg font-bold text-gray-900">Главная</h1>
 
       {/* Карусель и визитка сервиса */}
       <section className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <Carousel photos={photos} fallbackLetter={profile.name.slice(0, 1)} onOpen={setLightbox} />
         <div className="p-5">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-full bg-brand-yellow overflow-hidden flex items-center justify-center text-brand-blue-dark font-bold text-xl flex-shrink-0 border border-gray-100">
-              {profile.logo_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={imageUrl(profile.logo_url) ?? ""} alt="" className="w-full h-full object-cover" />
-              ) : (
-                profile.name.slice(0, 1)
-              )}
-            </div>
             <div className="min-w-0">
               <h2 className="text-xl font-semibold text-gray-900 leading-tight">{profile.name}</h2>
               {profile.tagline && <p className="text-sm text-gray-500 mt-0.5">{profile.tagline}</p>}

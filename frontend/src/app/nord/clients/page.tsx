@@ -1065,10 +1065,10 @@ function ClientsPageInner() {
   ];
 
   return (
-    <div className="-m-6 md:-m-10 p-6 md:p-10 md:rounded-[12px] bg-[#e8eaf0] min-h-[100dvh] md:min-h-[calc(100dvh-2rem)]">
+    <div className="-m-6 md:-m-10 p-3 md:p-10 md:rounded-[12px] bg-[#e8eaf0] min-h-[100dvh] md:min-h-[calc(100dvh-2rem)]">
       <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">Клиенты</h1>
+          <h1 className="hidden md:block text-xl font-semibold text-gray-900">Клиенты</h1>
           <p className="text-xs text-gray-400 mt-0.5">Всего: {clients.length}</p>
         </div>
         <button onClick={() => setOrgModal(true)} className={BTN_PRIMARY}>

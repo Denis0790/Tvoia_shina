@@ -9,6 +9,10 @@ export function getManagerAccessToken() {
 
 export function setManagerAccessToken(token: string | null) {
   managerAccessToken = token;
+  try {
+    if (token) localStorage.setItem("mgr_session", "1");
+    else localStorage.removeItem("mgr_session");
+  } catch {}
   if (refreshTimer) clearTimeout(refreshTimer);
   if (token) {
     refreshTimer = setTimeout(() => {
@@ -31,7 +35,7 @@ async function doManagerRefresh(): Promise<string | null> {
     setManagerAccessToken(data.access_token);
     return data.access_token;
   } catch {
-    setManagerAccessToken(null);
+    managerAccessToken = null; // нет связи: сессию менеджера не сбрасываем
     return null;
   }
 }

@@ -681,7 +681,7 @@ function ClientDetail({
 
       {/* шапка */}
       <div className="bg-white rounded-2xl shadow-sm p-5">
-        <div className="flex items-start gap-3">
+        <div className="flex flex-wrap md:flex-nowrap items-start gap-3">
           <div
             className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${
               isOrg ? "bg-brand-yellow/30 text-brand-blue-dark" : "bg-brand-blue/10 text-brand-blue"
@@ -703,28 +703,30 @@ function ClientDetail({
               {" · "}записей: {client.bookings_count}
             </p>
           </div>
-          <div className="flex items-center gap-1 shrink-0">
+          <div className="flex items-center gap-2 md:gap-1 w-full md:w-auto md:shrink-0">
             {client.phone && (
               <a
                 href={`tel:${client.phone}`}
                 aria-label="Позвонить"
                 title="Позвонить"
-                className="w-9 h-9 rounded-xl flex items-center justify-center text-gray-500 hover:bg-gray-100 hover:text-brand-blue active:bg-gray-200 transition-colors"
+                className="h-10 md:h-9 flex-1 md:flex-none md:w-9 gap-1.5 rounded-xl border border-gray-200 md:border-0 flex items-center justify-center text-gray-600 md:text-gray-500 hover:bg-gray-100 hover:text-brand-blue active:bg-gray-200 transition-colors"
               >
                 <Icon name="phone" className="w-[18px] h-[18px]" />
+                <span className="md:hidden text-sm font-medium">Позвонить</span>
               </a>
             )}
             <Link
               href={`/nord/chat?user=${client.id}`}
               aria-label="Чат"
               title="Чат"
-              className="w-9 h-9 rounded-xl flex items-center justify-center text-gray-500 hover:bg-gray-100 hover:text-brand-blue active:bg-gray-200 transition-colors"
+              className="h-10 md:h-9 flex-1 md:flex-none md:w-9 gap-1.5 rounded-xl border border-gray-200 md:border-0 flex items-center justify-center text-gray-600 md:text-gray-500 hover:bg-gray-100 hover:text-brand-blue active:bg-gray-200 transition-colors"
             >
               <Icon name="chat" className="w-[18px] h-[18px]" />
+              <span className="md:hidden text-sm font-medium">Чат</span>
             </Link>
             <Link
               href={`/nord/calendar?client=${client.id}`}
-              className="ml-1 inline-flex items-center gap-1.5 h-9 rounded-xl bg-brand-yellow text-brand-blue-dark text-xs font-semibold px-3 hover:brightness-95 whitespace-nowrap"
+              className="md:ml-1 flex-1 md:flex-none justify-center inline-flex items-center gap-1.5 h-10 md:h-9 rounded-xl bg-brand-yellow text-brand-blue-dark text-sm md:text-xs font-semibold px-3 hover:brightness-95 whitespace-nowrap"
             >
               <Icon name="calendar-plus" className="w-4 h-4" />
               Записать

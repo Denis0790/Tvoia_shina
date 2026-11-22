@@ -276,7 +276,7 @@ export default function NordHomePage() {
           <h1 className="hidden md:block text-lg font-bold text-gray-900">Главная</h1>
           <p className="text-xs text-gray-500 mt-0.5">Так ваш сервис увидят клиенты. Блоки идут в том же порядке, что и на странице.</p>
         </div>
-        <a href="/" target="_blank" rel="noreferrer" className={`${ghostBtn} whitespace-nowrap`}>
+        <a href="/?preview=1" target="_blank" rel="noreferrer" className={`${ghostBtn} whitespace-nowrap`}>
           Как у клиента
         </a>
       </div>

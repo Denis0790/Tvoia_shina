@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { managerApiFetch, refreshManagerAccessToken } from "@/lib/managerAuth";
 import { managerSocket } from "@/lib/chatSocket";
+import PushPrompt from "@/components/PushPrompt";
 import { useChatCounters } from "@/lib/useChatCounters";
 
 type Me = { id: string; phone: string | null; role: string; full_name: string | null };
@@ -87,6 +88,7 @@ export default function NordLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <div className="min-h-screen w-full bg-gradient-to-br from-brand-blue-dark via-brand-blue to-brand-blue flex justify-center overflow-x-clip">
+      <PushPrompt fetcher={managerApiFetch} active />
       <div aria-hidden className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute -top-40 -left-32 w-[560px] h-[560px] rounded-full bg-white/10 blur-3xl" />
         <div className="absolute -bottom-48 -right-32 w-[520px] h-[520px] rounded-full bg-brand-yellow/10 blur-3xl" />

@@ -50,6 +50,7 @@ export const metadata: Metadata = {
     description: DESCRIPTION,
     images: [{ url: "/icon-512.png", width: 512, height: 512, alt: "СТО Твоя Шина" }],
   },
+  verification: { yandex: "48e08926b7ceb8ba", google: "Ze_XqhOYWuVCpm9DOVHjUzD1IHwC9iuPzm8M2YZZY7M" },
   manifest: "/manifest.json",
   icons: {
     icon: [

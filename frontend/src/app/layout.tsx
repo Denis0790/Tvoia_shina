@@ -16,9 +16,40 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const SITE_URL = "https://sto-tyre4u.ru";
+const DESCRIPTION =
+  "Автосервис «Твоя Шина» в Ярославле (ул. Промышленная, 2к): замена масла, ремонт двигателя и подвески, техническое обслуживание, заказ и подбор запчастей. Онлайн-запись на сайте.";
+
 export const metadata: Metadata = {
-  title: "Твоя Шина",
-  description: "Онлайн-запись в автосервис Твоя Шина",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: "СТО «Твоя Шина» в Ярославле — автосервис, ремонт и обслуживание авто",
+    template: "%s — СТО «Твоя Шина», Ярославль",
+  },
+  description: DESCRIPTION,
+  applicationName: "СТО Твоя Шина",
+  keywords: [
+    "СТО Ярославль",
+    "автосервис Ярославль",
+    "Твоя Шина",
+    "СТО Твоя Шина",
+    "замена масла Ярославль",
+    "ремонт двигателя",
+    "ремонт подвески",
+    "обслуживание автомобилей",
+    "техническое обслуживание",
+    "запчасти для авто",
+    "запись на СТО онлайн",
+  ],
+  openGraph: {
+    type: "website",
+    locale: "ru_RU",
+    url: "/",
+    siteName: "СТО «Твоя Шина»",
+    title: "СТО «Твоя Шина» в Ярославле",
+    description: DESCRIPTION,
+    images: [{ url: "/icon-512.png", width: 512, height: 512, alt: "СТО Твоя Шина" }],
+  },
   manifest: "/manifest.json",
   icons: {
     icon: [

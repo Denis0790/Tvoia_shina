@@ -1328,11 +1328,16 @@ function CalendarPageInner() {
     });
   }, [monday, mondayISO, weekend]);
 
-  // Если открыта суббота/воскресенье, а в этот день никто не работает — возвращаемся на понедельник
+  // Если открыта суббота/воскресенье, а в этот день никто не работает — идём вперёд
+  // до ближайшего рабочего дня (воскресенье, если оно рабочее, иначе понедельник следующей недели)
   useEffect(() => {
     if (!weekend || weekend.monday !== mondayISO) return;
     const day = date.getDay();
-    if ((day === 6 && !weekend.sat) || (day === 0 && !weekend.sun)) setDate(new Date(monday));
+    if ((day === 6 && !weekend.sat) || (day === 0 && !weekend.sun)) {
+      const next = new Date(monday);
+      next.setDate(next.getDate() + (day === 6 && weekend.sun ? 6 : 7));
+      setDate(next);
+    }
   }, [weekend, mondayISO, date, monday]);
 
   // колонку мастера в выходной/отпуск оставляем, если в ней есть записи: их нужно перенести

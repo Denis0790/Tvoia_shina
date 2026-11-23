@@ -5,9 +5,9 @@ import { usePathname } from "next/navigation";
 import { COOKIE_KEY } from "./CookieNotice";
 
 const DISMISS_KEY = "install_prompt_dismissed";
-const DISMISS_DAYS = 14;
+const DISMISS_DAYS = 7;
 
-type InstallEvent = Event & { prompt: () => Promise<void> };
+type InstallEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: "accepted" | "dismissed" }> };
 
 function isStandalone() {
   return (
@@ -42,13 +42,25 @@ export default function InstallPrompt() {
       if (isAndroid) setMode("android");
     };
     // Chrome иногда не присылает событие установки: тогда показываем инструкцию вручную
-    const timer = isAndroid ? setTimeout(() => setMode((m) => m ?? "manual"), 4000) : null;
+    const timer = isAndroid
+      ? setTimeout(async () => {
+          try {
+            const nav = navigator as unknown as { getInstalledRelatedApps?: () => Promise<unknown[]> };
+            const apps = await nav.getInstalledRelatedApps?.();
+            if (apps && apps.length > 0) return; // уже установлено
+          } catch {}
+          setMode((m) => m ?? "manual");
+        }, 4000)
+      : null;
+    const onInstalled = () => setMode(null);
     const onCookie = () => setCookieOk(true);
     window.addEventListener("beforeinstallprompt", onPrompt);
+    window.addEventListener("appinstalled", onInstalled);
     window.addEventListener("cookie-notice-ok", onCookie);
     return () => {
       if (timer) clearTimeout(timer);
       window.removeEventListener("beforeinstallprompt", onPrompt);
+      window.removeEventListener("appinstalled", onInstalled);
       window.removeEventListener("cookie-notice-ok", onCookie);
     };
   }, []);
@@ -65,7 +77,10 @@ export default function InstallPrompt() {
   async function install() {
     if (!deferred) return;
     await deferred.prompt();
-    dismiss();
+    const { outcome } = await deferred.userChoice;
+    // при установке ничего не запоминаем: после удаления приложения предложение должно появиться снова
+    if (outcome === "accepted") setMode(null);
+    else dismiss();
   }
 
   return (

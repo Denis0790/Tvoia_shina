@@ -3,11 +3,11 @@
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { COOKIE_KEY } from "./CookieNotice";
+import { setDeferredInstall, type InstallEvent } from "@/lib/install";
 
 const DISMISS_KEY = "install_prompt_dismissed";
-const DISMISS_DAYS = 7;
+const DISMISS_DAYS = 1;
 
-type InstallEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: "accepted" | "dismissed" }> };
 
 function isStandalone() {
   return (
@@ -39,6 +39,7 @@ export default function InstallPrompt() {
     const onPrompt = (e: Event) => {
       e.preventDefault();
       setDeferred(e as InstallEvent);
+      setDeferredInstall(e as InstallEvent);
       if (isAndroid) setMode("android");
     };
     // Chrome иногда не присылает событие установки: тогда показываем инструкцию вручную
@@ -79,7 +80,10 @@ export default function InstallPrompt() {
     await deferred.prompt();
     const { outcome } = await deferred.userChoice;
     // при установке ничего не запоминаем: после удаления приложения предложение должно появиться снова
-    if (outcome === "accepted") setMode(null);
+    if (outcome === "accepted") {
+      setDeferredInstall(null);
+      setMode(null);
+    }
     else dismiss();
   }
 

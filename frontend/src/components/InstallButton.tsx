@@ -3,21 +3,34 @@
 import { useEffect, useState } from "react";
 import { getDeferredInstall, isIosDevice, isStandalone, setDeferredInstall } from "@/lib/install";
 
-// Кнопка «Установить приложение» для профиля клиента.
+type RelatedNav = { getInstalledRelatedApps?: () => Promise<unknown[]> };
+
+// Кнопка «Установить приложение» для профиля клиента. Показывается только на телефонах.
 export default function InstallButton() {
   const [ready, setReady] = useState(false);
-  const [installed, setInstalled] = useState(false);
+  const [mobile, setMobile] = useState(false);
+  const [running, setRunning] = useState(false); // открыто из установленного приложения
+  const [already, setAlready] = useState(false); // приложение есть на телефоне, но открыли в браузере
   const [canInstall, setCanInstall] = useState(false);
   const [help, setHelp] = useState(false);
   const ios = ready && isIosDevice();
 
   useEffect(() => {
     const sync = () => {
-      setInstalled(isStandalone());
-      setCanInstall(!!getDeferredInstall());
+      setRunning(isStandalone());
+      const ev = !!getDeferredInstall();
+      setCanInstall(ev);
+      if (ev) setAlready(false); // Chrome присылает событие только когда приложения нет
     };
     sync();
+    setMobile(/Android|iPhone|iPad|iPod/.test(navigator.userAgent) || isIosDevice());
     setReady(true);
+    (navigator as unknown as RelatedNav)
+      .getInstalledRelatedApps?.()
+      .then((apps) => {
+        if (apps && apps.length > 0 && !getDeferredInstall()) setAlready(true);
+      })
+      .catch(() => {});
     window.addEventListener("install-available", sync);
     window.addEventListener("appinstalled", sync);
     return () => {
@@ -26,10 +39,16 @@ export default function InstallButton() {
     };
   }, []);
 
-  if (!ready) return null;
+  if (!ready || !mobile) return null;
 
-  if (installed) {
-    return <p className="text-sm text-gray-500">Приложение установлено ✓</p>;
+  if (running) return <p className="text-sm text-gray-500">Приложение установлено ✓</p>;
+
+  if (already && !canInstall) {
+    return (
+      <p className="text-sm text-gray-500">
+        Приложение уже установлено на этом телефоне. Откройте его с главного экрана.
+      </p>
+    );
   }
 
   async function install() {

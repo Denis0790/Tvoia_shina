@@ -10,6 +10,10 @@
   "lang": "ru",
   "background_color": "#02167f",
   "theme_color": "#02167f",
+  "prefer_related_applications": false,
+  "related_applications": [
+    { "platform": "webapp", "url": "https://sto-tyre4u.ru/manifest.json" }
+  ],
   "icons": [
     { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },

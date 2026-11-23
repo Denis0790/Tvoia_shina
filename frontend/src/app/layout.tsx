@@ -77,8 +77,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full flex flex-col">
         <OrgJsonLd /><AuthProvider>{children}
+</AuthProvider>
         <CookieNotice />
-        <InstallPrompt /></AuthProvider>
+        <InstallPrompt />
         <PwaRegister />
       </body>
     </html>

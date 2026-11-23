@@ -578,6 +578,7 @@ export type CalendarBooking = {
   services_text: string | null;
   group_id: string | null; // длинная запись, разбитая по дням
   part: number; // 0 — первая часть, >0 — продолжение на следующий день
+  ready?: boolean; // менеджер отметил «машина готова»
   car: CalendarCar | null;
   services: CalendarService[];
 };
@@ -866,5 +867,11 @@ export async function changeBookingDuration(id: string, deltaMinutes: number) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ delta_minutes: deltaMinutes }),
   });
+  return res.ok;
+}
+
+// Отметить запись как готовую: клиенту уйдёт уведомление «Машина готова».
+export async function markBookingReady(id: string) {
+  const res = await managerApiFetch(`/bookings/${id}/ready`, { method: "POST" });
   return res.ok;
 }

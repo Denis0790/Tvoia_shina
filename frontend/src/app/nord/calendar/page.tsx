@@ -14,6 +14,7 @@ import {
   declineBooking,
   rescheduleBooking,
   changeBookingDuration,
+  markBookingReady,
   cancelBooking,
   movePendingBooking,
   createManualBooking,
@@ -1462,6 +1463,31 @@ function CalendarPageInner() {
     if (b) setNoteAsk({ kind: "decline", booking: b });
   }
 
+  // «Готово»: правый клик или долгое нажатие на подтверждённую запись
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pressed = useRef(false);
+  const lastAsk = useRef(0);
+  function clearPress() {
+    if (pressTimer.current) clearTimeout(pressTimer.current);
+    pressTimer.current = null;
+  }
+  async function askReady(b: { id: string; client_name: string; ready?: boolean }) {
+    if (Date.now() - lastAsk.current < 1500) return; // на Android срабатывают и контекстное меню, и таймер
+    lastAsk.current = Date.now();
+    if (b.ready) {
+      alert("Эта запись уже отмечена как готовая");
+      return;
+    }
+    if (!confirm(`Отметить «Готово» для ${b.client_name}?\n\nКлиенту придёт уведомление, что машина готова.`)) return;
+    const ok = await markBookingReady(b.id);
+    if (ok) {
+      setToast("Отмечено, клиент уведомлён");
+      load();
+    } else {
+      alert("Не удалось отметить запись");
+    }
+  }
+
   async function handleDuration(id: string, delta: number) {
     const ok = await changeBookingDuration(id, delta);
     if (ok) {
@@ -1752,6 +1778,7 @@ function CalendarPageInner() {
                     const start = timeToMinutes(booking.start_time);
                     const top = (start - globalStart) * PX_PER_MIN + GAP / 2;
                     const height = booking.duration_minutes * PX_PER_MIN - GAP;
+                    const compact = height < 44; // короткая запись: всё в одну строку
                     const serviceLabel =
                       [booking.services.map((s) => s.name).join(", "), booking.services_text]
                         .filter(Boolean)
@@ -1764,12 +1791,36 @@ function CalendarPageInner() {
                         key={booking.id}
                         onMouseEnter={() => setHoveredBooking(booking)}
                         onMouseLeave={() => setHoveredBooking(null)}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          if (status === "confirmed") askReady(booking);
+                        }}
+                        onTouchStart={() => {
+                          pressed.current = false;
+                          clearPress();
+                          if (status !== "confirmed") return;
+                          pressTimer.current = setTimeout(() => {
+                            pressed.current = true;
+                            askReady(booking);
+                          }, 600);
+                        }}
+                        onTouchEnd={clearPress}
+                        onTouchMove={clearPress}
+                        onTouchCancel={clearPress}
                         onClick={(e) => {
                           e.stopPropagation();
-                          setHoveredBooking(booking);
+                          if (pressed.current) {
+                            pressed.current = false;
+                            return;
+                          }
+                          // на телефоне (нет наведения) повторное нажатие закрывает карточку
+                          const touch = window.matchMedia("(hover: none)").matches;
+                          setHoveredBooking(touch && isHovered ? null : booking);
                         }}
-                        className={`absolute inset-x-1 rounded-md border cursor-pointer transition-colors flex flex-col justify-center px-2 py-1 gap-0.5 shadow-sm ${
-                          isPending
+                        className={`absolute inset-x-1 rounded-md border cursor-pointer transition-colors flex flex-col justify-center px-2 ${compact ? "py-0" : "py-1"} gap-0.5 shadow-sm ${
+                          booking.ready
+                            ? "bg-green-200 border-green-500"
+                            : isPending
                             ? isHovered
                               ? "bg-[#F5E3B8] border-[#E8B84B]"
                               : "bg-[#FBEFD6] border-[#E8B84B]"
@@ -1784,9 +1835,12 @@ function CalendarPageInner() {
                             isPending ? "text-[#8A6212]" : "text-brand-blue-dark"
                           }`}
                         >
-                          {booking.is_org ? booking.client_name : firstName(booking.client_name)}{booking.part > 0 ? " · продолжение" : ""}
+                          {booking.ready ? "✓ " : ""}{booking.is_org ? booking.client_name : firstName(booking.client_name)}{booking.part > 0 ? " · продолжение" : ""}
+                          {compact && (serviceLabel || carLabel) ? (
+                            <span className="font-normal opacity-80"> · {[serviceLabel, carLabel].filter(Boolean).join(" · ")}</span>
+                          ) : null}
                         </span>
-                        {serviceLabel && (
+                        {!compact && serviceLabel && (
                           <span
                             className={`text-[10px] truncate leading-tight ${
                               isPending ? "text-[#8A6212]/80" : "text-brand-blue-dark/80"
@@ -1795,7 +1849,7 @@ function CalendarPageInner() {
                             {serviceLabel}
                           </span>
                         )}
-                        {carLabel && (
+                        {!compact && carLabel && (
                           <span
                             className={`text-[10px] truncate leading-tight ${
                               isPending ? "text-[#8A6212]/70" : "text-brand-blue-dark/70"

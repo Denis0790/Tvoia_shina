@@ -1,17 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { pushSupported, subscribeDevice } from "@/lib/push";
+import { COOKIE_KEY } from "./CookieNotice";
 
 type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
 const DISMISS_KEY = "push_prompt_dismissed";
-const DISMISS_DAYS = 7;
+const DISMISS_DAYS = 30;
 
 // Уведомления по умолчанию: разрешение уже есть — подписываем тихо, нет — одна плашка с кнопкой.
+// Плашки не копим: ждём принятия куки, а на телефоне в браузере сначала предлагается установка приложения.
 export default function PushPrompt({ fetcher, active }: { fetcher: Fetcher; active: boolean }) {
   const [ask, setAsk] = useState(false);
 
-  useEffect(() => {
+  const evaluate = useCallback(() => {
     if (!active || !pushSupported()) return;
     if (Notification.permission === "granted") {
       subscribeDevice(fetcher).catch(() => {});
@@ -22,8 +24,25 @@ export default function PushPrompt({ fetcher, active }: { fetcher: Fetcher; acti
       const t = Number(localStorage.getItem(DISMISS_KEY) || 0);
       if (t && Date.now() - t < DISMISS_DAYS * 86400000) return;
     } catch {}
+    const admin = window.location.pathname.startsWith("/nord");
+    if (!admin) {
+      try {
+        if (!localStorage.getItem(COOKIE_KEY)) return;
+      } catch {}
+      const standalone =
+        window.matchMedia("(display-mode: standalone)").matches ||
+        (navigator as unknown as { standalone?: boolean }).standalone === true;
+      const mobile = /Android|iPhone|iPad|iPod/.test(navigator.userAgent);
+      if (mobile && !standalone) return;
+    }
     setAsk(true);
   }, [active, fetcher]);
+
+  useEffect(() => {
+    evaluate();
+    window.addEventListener("cookie-notice-ok", evaluate);
+    return () => window.removeEventListener("cookie-notice-ok", evaluate);
+  }, [evaluate]);
 
   if (!ask) return null;
 

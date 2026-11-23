@@ -18,7 +18,7 @@ function isStandalone() {
 
 export default function InstallPrompt() {
   const pathname = usePathname();
-  const [mode, setMode] = useState<"android" | "ios" | null>(null);
+  const [mode, setMode] = useState<"android" | "ios" | "manual" | null>(null);
   const [cookieOk, setCookieOk] = useState(false);
   const [deferred, setDeferred] = useState<InstallEvent | null>(null);
 
@@ -41,10 +41,13 @@ export default function InstallPrompt() {
       setDeferred(e as InstallEvent);
       if (isAndroid) setMode("android");
     };
+    // Chrome иногда не присылает событие установки: тогда показываем инструкцию вручную
+    const timer = isAndroid ? setTimeout(() => setMode((m) => m ?? "manual"), 4000) : null;
     const onCookie = () => setCookieOk(true);
     window.addEventListener("beforeinstallprompt", onPrompt);
     window.addEventListener("cookie-notice-ok", onCookie);
     return () => {
+      if (timer) clearTimeout(timer);
       window.removeEventListener("beforeinstallprompt", onPrompt);
       window.removeEventListener("cookie-notice-ok", onCookie);
     };
@@ -72,6 +75,8 @@ export default function InstallPrompt() {
         <p>
           Нажмите «Поделиться» (квадрат со стрелкой) в браузере и выберите «На экран Домой».
         </p>
+      ) : mode === "manual" ? (
+        <p>Откройте меню браузера (три точки вверху) и выберите «Установить приложение» или «Добавить на главный экран».</p>
       ) : (
         <p>Запись и чат будут под рукой, как обычное приложение.</p>
       )}

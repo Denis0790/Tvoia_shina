@@ -432,6 +432,7 @@ async def _notify_booking(db: AsyncSession, kind: str, *, booking_id, actor: str
             "confirmed": "Запись подтверждена",
             "declined": "Заявка отклонена",
             "cancelled": "Запись отменена",
+            "ready": "Машина готова",
             "moved": "Запись перенесена",
             "duration": "Время записи изменено",
             "cancelled_by_client": "Запись отменена клиентом",
@@ -1282,6 +1283,7 @@ async def get_calendar(
                                 "services_text": booking.services_text,
                                 "group_id": str(booking.group_id) if booking.group_id else None,
                                 "part": booking.part,
+                                "ready": booking.ready_at is not None,
                                 "car": _car_dict(car),
                                 "services": [
                                     {"id": str(s.id), "name": s.name, "duration_minutes": s.duration_minutes}
@@ -1356,8 +1358,29 @@ async def change_booking_duration(
         db, booking, booking.post_id, booking.date, booking.start_time,
         statuses=("confirmed",), total=new_total, check_past=False,
     )
-    await _notify_booking(
-        db, "duration", booking_id=booking.id, actor="manager", actor_user=manager,
-        extra=f"Длительность: {_fmt_minutes(new_total)}",
-    )
+    # клиента о смене длительности не оповещаем: это внутренняя правка менеджера
     return {"ok": True, "duration_minutes": new_total}
+
+
+@router.post("/{booking_id}/ready")
+async def mark_booking_ready(
+    booking_id: uuid.UUID,
+    manager: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+):
+    """Менеджер отмечает, что машина готова: клиенту уходит карточка в чат и push.
+    Отмечается вся группа записи; повторный вызов ничего не отправляет."""
+    clause = await _group_clause(db, booking_id)
+    if clause is None:
+        raise HTTPException(status_code=409, detail="Запись не найдена или уже не подтверждена")
+    result = await db.execute(
+        update(Booking).where(clause, Booking.status == "confirmed", Booking.ready_at.is_(None)).values(ready_at=func.now())
+    )
+    await db.commit()
+    if result.rowcount == 0:
+        return {"ok": True, "already": True}
+    await _notify_booking(
+        db, "ready", booking_id=booking_id, actor="manager", actor_user=manager,
+        extra="Можно забирать автомобиль",
+    )
+    return {"ok": True, "already": False}

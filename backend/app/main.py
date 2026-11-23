@@ -106,6 +106,7 @@ async def lifespan(app: FastAPI):
         await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS consent_version VARCHAR(20)"))
         await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS consent_ip VARCHAR(45)"))
         await conn.execute(text("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS reminder_sent_at TIMESTAMPTZ"))
+        await conn.execute(text("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS ready_at TIMESTAMPTZ"))
     cleanup_task = asyncio.create_task(_media_cleanup_loop())
     reminder_task = asyncio.create_task(_reminder_loop())
     yield

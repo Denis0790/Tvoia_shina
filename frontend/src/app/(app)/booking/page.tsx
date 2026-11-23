@@ -11,9 +11,11 @@ import {
   type PostAvailability,
   type Car,
 } from "@/lib/api";
+import DragScroll from "@/components/DragScroll";
 
 const DAYS_AHEAD = 21;
 const MAX_MINUTES = 480; // лимит одной клиентской записи — 8 часов
+
 const COLLAPSED_COUNT = 6;
 
 function formatDuration(min: number) {
@@ -297,7 +299,7 @@ export default function BookingPage() {
             />
 
             {categories.length > 1 && (
-              <div className="flex flex-wrap gap-2 mt-3">
+              <DragScroll className="mt-3">
                 <button onClick={() => setCategory("")} className={`${chipBase} ${category === "" ? chipOn : chipOff}`}>
                   Все
                 </button>
@@ -306,10 +308,10 @@ export default function BookingPage() {
                     {c}
                   </button>
                 ))}
-              </div>
+              </DragScroll>
             )}
 
-            <ul className="mt-3">
+            <ul className={`mt-3 ${expanded && !q && !category ? "max-h-80 overflow-y-auto overscroll-contain" : ""}`}>
               {limited.map((s) => {
                 const on = !!selected.find((x) => x.id === s.id);
                 return (

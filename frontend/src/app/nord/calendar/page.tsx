@@ -1037,6 +1037,41 @@ function NoteDialog({
   );
 }
 
+/** Подтверждение «Машина готова»: клиенту уйдёт сообщение в чат и push. */
+function ReadyModal({ name, onSubmit, onClose }: { name: string; onSubmit: () => Promise<void>; onClose: () => void }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
+        <div className="w-11 h-11 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-xl font-bold mb-3">✓</div>
+        <h2 className="text-base font-semibold text-gray-900">Машина готова?</h2>
+        <p className="text-sm text-gray-500 mt-1">
+          {name} получит сообщение в чат и уведомление на телефон: «Машина готова, можно забирать».
+        </p>
+        <div className="mt-4 flex items-center gap-2">
+          <button
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              await onSubmit();
+              setBusy(false);
+            }}
+            className="flex-1 bg-green-600 hover:bg-green-600/90 text-white text-sm font-medium rounded-lg py-2.5 active:scale-[0.98] disabled:opacity-40 transition cursor-pointer"
+          >
+            {busy ? "Отправляю…" : "Да, машина готова"}
+          </button>
+          <button
+            onClick={onClose}
+            className="text-sm text-gray-500 px-4 py-2.5 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+          >
+            Назад
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** Лист для печати: расписание выбранного дня, посты — колонками. Показывается только при печати. */
 function PrintSheet({ date, posts }: { date: Date; posts: CalendarPost[] }) {
   const [mounted, setMounted] = useState(false);
@@ -1467,6 +1502,7 @@ function CalendarPageInner() {
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pressed = useRef(false);
   const lastAsk = useRef(0);
+  const [readyAsk, setReadyAsk] = useState<{ id: string; name: string } | null>(null);
   function clearPress() {
     if (pressTimer.current) clearTimeout(pressTimer.current);
     pressTimer.current = null;
@@ -1475,16 +1511,22 @@ function CalendarPageInner() {
     if (Date.now() - lastAsk.current < 1500) return; // на Android срабатывают и контекстное меню, и таймер
     lastAsk.current = Date.now();
     if (b.ready) {
-      alert("Эта запись уже отмечена как готовая");
+      setToast("Эта запись уже отмечена как готовая");
       return;
     }
-    if (!confirm(`Отметить «Готово» для ${b.client_name}?\n\nКлиенту придёт уведомление, что машина готова.`)) return;
-    const ok = await markBookingReady(b.id);
+    setReadyAsk({ id: b.id, name: b.client_name });
+  }
+
+  async function submitReady() {
+    const a = readyAsk;
+    if (!a) return;
+    const ok = await markBookingReady(a.id);
+    setReadyAsk(null);
     if (ok) {
       setToast("Отмечено, клиент уведомлён");
       load();
     } else {
-      alert("Не удалось отметить запись");
+      setToast("Не удалось отметить запись");
     }
   }
 
@@ -1915,6 +1957,8 @@ function CalendarPageInner() {
           }}
         />
       )}
+
+      {readyAsk && <ReadyModal name={readyAsk.name} onSubmit={submitReady} onClose={() => setReadyAsk(null)} />}
 
       {noteAsk && (
         <NoteDialog

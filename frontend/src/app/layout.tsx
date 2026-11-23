@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import AuthProvider from "./auth-provider";
+import OrgJsonLd from "@/components/OrgJsonLd";
 import PwaRegister from "./pwa-register";
 import CookieNotice from "@/components/CookieNotice";
 import InstallPrompt from "@/components/InstallPrompt";
@@ -75,7 +76,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <AuthProvider>{children}
+        <OrgJsonLd /><AuthProvider>{children}
         <CookieNotice />
         <InstallPrompt /></AuthProvider>
         <PwaRegister />

@@ -875,3 +875,32 @@ export async function markBookingReady(id: string) {
   const res = await managerApiFetch(`/bookings/${id}/ready`, { method: "POST" });
   return res.ok;
 }
+
+export type BookingDetailsInput = {
+  client_name?: string;
+  phone?: string;
+  car_make?: string;
+  car_model?: string;
+  car_plate?: string;
+  vin?: string;
+  service_ids?: string[];
+  services_text?: string;
+  comment?: string;
+};
+
+// Правка уже созданной записи менеджером (клиента не уведомляем). Шлём только изменённые поля.
+export async function updateBookingDetails(
+  id: string,
+  data: BookingDetailsInput
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const res = await managerApiFetch(`/bookings/${id}/details`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    return { ok: false, error: body && typeof body.detail === "string" ? body.detail : "Не удалось сохранить" };
+  }
+  return { ok: true };
+}

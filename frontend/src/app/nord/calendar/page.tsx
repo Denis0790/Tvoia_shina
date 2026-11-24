@@ -15,6 +15,8 @@ import {
   rescheduleBooking,
   changeBookingDuration,
   markBookingReady,
+  updateBookingDetails,
+  type BookingDetailsInput,
   cancelBooking,
   movePendingBooking,
   createManualBooking,
@@ -98,6 +100,7 @@ function BookingPopover({
   onCancelAction,
   onDurationChange,
   onCopy,
+  onEdit,
 }: {
   booking: CalendarBooking;
   status: "pending" | "confirmed";
@@ -109,6 +112,7 @@ function BookingPopover({
   onCancelAction: () => void;
   onDurationChange?: (delta: number) => void;
   onCopy: (text: string) => void;
+  onEdit: () => void;
 }) {
   const duration = draftDuration ?? booking.duration_minutes;
   const ref = useRef<HTMLDivElement>(null);
@@ -168,6 +172,21 @@ function BookingPopover({
             Чат
           </Link>
         )}
+        <button
+          type="button"
+          title="Редактировать запись"
+          aria-label="Редактировать запись"
+          onClick={(e) => {
+            e.stopPropagation();
+            onEdit();
+          }}
+          className="shrink-0 ml-auto bg-gray-700 hover:bg-gray-600 active:bg-gray-500 rounded-lg p-1.5 transition-colors cursor-pointer"
+        >
+          <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 20h9" />
+            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+          </svg>
+        </button>
       </div>
 
       {booking.phone && (
@@ -1050,6 +1069,192 @@ function NoteDialog({
   );
 }
 
+/** Редактирование уже созданной записи: клиент, авто, работы, комментарий. Клиента не уведомляем. */
+function EditBookingModal({
+  booking,
+  onClose,
+  onSaved,
+}: {
+  booking: CalendarBooking;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const initName = booking.is_guest || booking.client_name === booking.phone ? "" : booking.client_name;
+  const [name, setName] = useState(initName);
+  const [phone, setPhone] = useState(booking.phone ?? "");
+  const [make, setMake] = useState(booking.car?.make ?? "");
+  const [model, setModel] = useState(booking.car?.model ?? "");
+  const [plate, setPlate] = useState(booking.car?.plate ?? "");
+  const [vin, setVin] = useState(booking.car?.vin ?? "");
+  const [picked, setPicked] = useState<Service[]>(
+    booking.services.map((s) => ({ id: s.id, name: s.name, duration_minutes: s.duration_minutes }))
+  );
+  const [other, setOther] = useState(booking.services_text ?? "");
+  const [comment, setComment] = useState(booking.comment ?? "");
+  const [catalog, setCatalog] = useState<Service[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getServices().then(setCatalog).catch(() => setCatalog([]));
+  }, []);
+
+  const inp =
+    "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-blue";
+  const lbl = "block text-xs text-gray-500 mt-3 mb-1";
+
+  async function save() {
+    const data: BookingDetailsInput = {};
+    if (!booking.is_org) {
+      if (name.trim() !== initName.trim()) data.client_name = name.trim();
+      const raw = phone.trim();
+      if (raw) {
+        const d = extractNational(raw);
+        if (d.length !== 10) {
+          setError("Введите номер телефона полностью");
+          return;
+        }
+        const full = `+7${d}`;
+        if (full !== (booking.phone ?? "")) data.phone = full;
+      }
+    }
+    if (make.trim() !== (booking.car?.make ?? "")) data.car_make = make.trim();
+    if (model.trim() !== (booking.car?.model ?? "")) data.car_model = model.trim();
+    if (plate.trim().toUpperCase().replace(/\s/g, "") !== (booking.car?.plate ?? "")) data.car_plate = plate.trim();
+    if (vin.trim().toUpperCase() !== (booking.car?.vin ?? "")) data.vin = vin.trim();
+    const before = booking.services.map((s) => s.id).sort().join(",");
+    const after = picked.map((s) => s.id).sort().join(",");
+    if (before !== after) data.service_ids = picked.map((s) => s.id);
+    if (other.trim() !== (booking.services_text ?? "")) data.services_text = other.trim();
+    if (comment.trim() !== (booking.comment ?? "")) data.comment = comment.trim();
+    if (Object.keys(data).length === 0) {
+      onClose();
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    const res = await updateBookingDetails(booking.id, data);
+    setSaving(false);
+    if (!res.ok) {
+      setError(res.error);
+      return;
+    }
+    onSaved();
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl shadow-xl w-full max-w-md p-5 max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="text-base font-semibold text-gray-900">Редактировать запись</h2>
+        <p className="text-xs text-gray-500 mt-0.5">{booking.start_time} · клиента об изменениях не уведомляем</p>
+
+        {booking.is_org ? (
+          <p className="text-xs text-gray-500 mt-3">Организация: данные клиента правятся в его карточке.</p>
+        ) : (
+          <>
+            <label className={lbl}>Имя клиента</label>
+            <input value={name} onChange={(e) => setName(e.target.value)} maxLength={255} placeholder="Имя" className={inp} />
+            <label className={lbl}>Телефон</label>
+            <input
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              inputMode="tel"
+              placeholder="+7 900 000-00-00"
+              className={inp}
+            />
+          </>
+        )}
+
+        <p className="text-xs font-semibold text-gray-700 mt-5">Автомобиль</p>
+        <div className="grid grid-cols-2 gap-2 mt-1">
+          <input value={make} onChange={(e) => setMake(e.target.value)} placeholder="Марка" className={inp} />
+          <input value={model} onChange={(e) => setModel(e.target.value)} placeholder="Модель" className={inp} />
+          <input value={plate} onChange={(e) => setPlate(e.target.value)} maxLength={20} placeholder="Гос. номер" className={inp} />
+          <input
+            value={vin}
+            onChange={(e) => setVin(e.target.value.toUpperCase())}
+            maxLength={17}
+            placeholder="VIN"
+            className={`${inp} font-mono`}
+          />
+        </div>
+
+        <p className="text-xs font-semibold text-gray-700 mt-5">Работы</p>
+        {picked.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            {picked.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => setPicked(picked.filter((x) => x.id !== s.id))}
+                title="Убрать"
+                className="inline-flex items-center gap-1 bg-brand-blue/10 text-brand-blue-dark text-xs rounded-full pl-2.5 pr-2 py-1 cursor-pointer"
+              >
+                {s.name}
+                <span aria-hidden>×</span>
+              </button>
+            ))}
+          </div>
+        )}
+        <select
+          value=""
+          onChange={(e) => {
+            const x = catalog.find((c) => c.id === e.target.value);
+            if (x) setPicked([...picked, x]);
+          }}
+          className={`${inp} mt-2`}
+        >
+          <option value="">Добавить услугу…</option>
+          {catalog
+            .filter((c) => !picked.some((p) => p.id === c.id))
+            .map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+        </select>
+        <input
+          value={other}
+          onChange={(e) => setOther(e.target.value)}
+          maxLength={500}
+          placeholder="Другое (своими словами)"
+          className={`${inp} mt-2`}
+        />
+
+        <label className={lbl}>Комментарий к записи</label>
+        <textarea
+          value={comment}
+          maxLength={500}
+          rows={2}
+          onChange={(e) => setComment(e.target.value)}
+          className={`${inp} resize-none`}
+        />
+
+        {error && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 mt-3">{error}</p>}
+
+        <div className="mt-4 flex items-center gap-2">
+          <button
+            disabled={saving}
+            onClick={save}
+            className="flex-1 bg-brand-blue text-white text-sm font-medium rounded-lg py-2.5 hover:bg-brand-blue/90 active:scale-[0.98] disabled:opacity-40 transition cursor-pointer"
+          >
+            {saving ? "Сохраняю…" : "Сохранить"}
+          </button>
+          <button
+            onClick={onClose}
+            className="text-sm text-gray-500 px-4 py-2.5 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+          >
+            Отмена
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** Подтверждение «Машина готова»: клиенту уйдёт сообщение в чат и push. */
 function ReadyModal({ name, onSubmit, onClose }: { name: string; onSubmit: () => Promise<void>; onClose: () => void }) {
   const [busy, setBusy] = useState(false);
@@ -1516,6 +1721,7 @@ function CalendarPageInner() {
   const pressed = useRef(false);
   const lastAsk = useRef(0);
   const [readyAsk, setReadyAsk] = useState<{ id: string; name: string } | null>(null);
+  const [editing, setEditing] = useState<CalendarBooking | null>(null);
   function clearPress() {
     if (pressTimer.current) clearTimeout(pressTimer.current);
     pressTimer.current = null;
@@ -1936,6 +2142,10 @@ function CalendarPageInner() {
                           }
                           onDurationChange={isPending ? undefined : (delta) => handleDuration(booking.id, delta)}
                           onCopy={copyText}
+                          onEdit={() => {
+                            setHoveredBooking(null);
+                            setEditing(booking);
+                          }}
                         />
                       </div>
                     );
@@ -1967,6 +2177,18 @@ function CalendarPageInner() {
             setToast("Запись создана");
             load();
             return null;
+          }}
+        />
+      )}
+
+      {editing && (
+        <EditBookingModal
+          booking={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null);
+            setToast("Запись обновлена");
+            load();
           }}
         />
       )}

@@ -1384,3 +1384,146 @@ async def mark_booking_ready(
         extra="Можно забирать автомобиль",
     )
     return {"ok": True, "already": False}
+
+
+class BookingDetailsUpdate(BaseModel):
+    client_name: str | None = None
+    phone: str | None = None
+    car_make: str | None = None
+    car_model: str | None = None
+    car_plate: str | None = None
+    vin: str | None = None
+    service_ids: list[uuid.UUID] | None = None
+    services_text: str | None = None
+    comment: str | None = None
+
+
+@router.patch("/{booking_id}/details")
+async def update_booking_details(
+    booking_id: uuid.UUID,
+    payload: BookingDetailsUpdate,
+    manager: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+):
+    """Менеджер правит уже созданную запись: клиента (имя, телефон), авто, работы, комментарий.
+    Меняется только присланное. Клиента об этом не уведомляем. Правится вся группа записи."""
+    from sqlalchemy import delete, insert
+    from app.models import booking_services
+
+    sent = payload.model_dump(exclude_unset=True)
+    found = (await db.execute(select(Booking).where(Booking.id == booking_id))).scalar_one_or_none()
+    if found is None or found.status not in ("pending", "confirmed"):
+        raise HTTPException(status_code=404, detail="Запись не найдена или уже закрыта")
+    clause = Booking.group_id == found.group_id if found.group_id is not None else Booking.id == found.id
+    rows = list((await db.execute(select(Booking).where(clause).order_by(Booking.part))).scalars().all())
+    user = (await db.execute(select(User).where(User.id == rows[0].user_id))).scalar_one()
+
+    # ---- проверка присланных значений ----
+    comment = None
+    if "comment" in sent:
+        comment = (sent["comment"] or "").strip() or None
+        if comment and len(comment) > 500:
+            raise HTTPException(status_code=400, detail="Комментарий слишком длинный (до 500 символов)")
+    services_text = None
+    if "services_text" in sent:
+        services_text = (sent["services_text"] or "").strip() or None
+        if services_text and len(services_text) > 500:
+            raise HTTPException(status_code=400, detail="Описание услуг слишком длинное (до 500 символов)")
+    vin = (sent.get("vin") or "").strip().upper() or None
+    if vin and len(vin) > 17:
+        raise HTTPException(status_code=400, detail="VIN не может быть длиннее 17 символов")
+    plate = (sent.get("car_plate") or "").strip().upper().replace(" ", "") or None
+    if plate and len(plate) > 20:
+        raise HTTPException(status_code=400, detail="Слишком длинный гос. номер")
+    make = (sent.get("car_make") or "").strip()
+    model = (sent.get("car_model") or "").strip()
+
+    # ---- клиент: имя и телефон ----
+    # «заготовку» (создана менеджером, не регистрировалась сама) править можно; зарегистрированного клиента — нет
+    editable_identity = user.kind != "org" and user.consent_at is None and user.email is None
+    target = user
+    if "client_name" in sent:
+        name = (sent["client_name"] or "").strip() or None
+        if name and name != (user.full_name or None):
+            if user.kind == "org" or not (editable_identity or not user.full_name):
+                raise HTTPException(status_code=409, detail="Имя зарегистрированного клиента меняет он сам")
+            user.full_name = name[:255]
+    if "phone" in sent and (sent["phone"] or "").strip():
+        phone = normalize_phone(sent["phone"].strip())
+        if phone != user.phone:
+            if user.kind == "org" or (user.phone and not editable_identity):
+                raise HTTPException(status_code=409, detail="Телефон зарегистрированного клиента меняет он сам")
+            other = (await db.execute(select(User).where(User.phone == phone))).scalar_one_or_none()
+            if other is not None and other.id != user.id:
+                if other.role != "client":
+                    raise HTTPException(status_code=409, detail="Этот номер принадлежит сотруднику")
+                target = other  # запись переезжает к уже существующему клиенту
+            else:
+                user.phone = phone
+
+    # ---- авто ----
+    old_car = None
+    if rows[0].car_id is not None:
+        old_car = (await db.execute(select(Car).where(Car.id == rows[0].car_id))).scalar_one_or_none()
+        if old_car is not None and old_car.user_id != user.id:
+            old_car = None
+    car_sent = any(k in sent for k in ("car_make", "car_model", "car_plate", "vin"))
+    car_id = rows[0].car_id
+    if target is not user or car_sent:
+        data = {
+            "make": old_car.make if old_car else "",
+            "model": old_car.model if old_car else "",
+            "vin": old_car.vin if old_car else None,
+            "plate": old_car.plate if old_car else None,
+        }
+        if "car_make" in sent:
+            data["make"] = make
+        if "car_model" in sent:
+            data["model"] = model
+        if "vin" in sent:
+            data["vin"] = vin
+        if "car_plate" in sent:
+            data["plate"] = plate
+        if old_car is not None and target is user:
+            old_car.make = data["make"] or old_car.make or "Авто"
+            old_car.model = data["model"]
+            old_car.vin = data["vin"]
+            old_car.plate = data["plate"]
+            car_id = old_car.id
+        elif any(data.values()):
+            car = Car(user_id=target.id, make=data["make"] or "Авто", model=data["model"], vin=data["vin"], plate=data["plate"])
+            db.add(car)
+            await db.flush()
+            car_id = car.id
+        else:
+            car_id = None
+
+    # ---- запись (все части группы) ----
+    for r in rows:
+        r.user_id = target.id
+        r.car_id = car_id
+        if "comment" in sent:
+            r.comment = comment
+        if "services_text" in sent:
+            r.services_text = services_text
+
+    if payload.service_ids is not None:
+        wanted = set(payload.service_ids)
+        if wanted:
+            existing = set((await db.execute(select(Service.id).where(Service.id.in_(wanted)))).scalars().all())
+            if existing != wanted:
+                raise HTTPException(status_code=400, detail="Некорректный список услуг")
+        ids = [r.id for r in rows]
+        await db.execute(delete(booking_services).where(booking_services.c.booking_id.in_(ids)))
+        if wanted:
+            await db.execute(
+                insert(booking_services),
+                [{"booking_id": rid, "service_id": sid} for rid in ids for sid in wanted],
+            )
+
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="Этот номер телефона уже занят")
+    return {"ok": True, "user_id": str(target.id)}

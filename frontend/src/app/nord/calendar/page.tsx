@@ -353,6 +353,7 @@ type NewBookingForm = {
   vin: string | null;
   services_text: string | null;
   service_ids: string[];
+  comment: string | null;
 };
 
 // Из любого ввода/вставки (+7…, 8…, со скобками и пробелами) достаём 10 цифр номера после +7
@@ -449,6 +450,7 @@ function NewBookingModal({
   useEffect(() => {
     getServices().then(setCatalog).catch(() => setCatalog([]));
   }, []);
+  const [comment, setComment] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -610,6 +612,7 @@ function NewBookingModal({
       vin: useNewCar ? vin.trim() || null : null,
       services_text: others.length > 0 ? others.join(", ").slice(0, 500) : null, // «Другое» хранится отдельно от справочных услуг
       service_ids: all.map((x) => x.id),
+      comment: comment.trim() || null,
     });
     if (err) {
       setError(err);
@@ -957,6 +960,16 @@ function NewBookingModal({
             </div>
           </div>
         </div>
+
+        <label className="block text-xs text-gray-500 mt-4 mb-1">Комментарий к записи</label>
+        <textarea
+          value={comment}
+          maxLength={500}
+          rows={2}
+          onChange={(e) => setComment(e.target.value)}
+          placeholder="Например: принесёт свои фильтры, приедет позже"
+          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:border-brand-blue"
+        />
 
         {error && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 mt-3">{error}</p>}
 

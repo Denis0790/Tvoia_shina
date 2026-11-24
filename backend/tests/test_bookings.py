@@ -1668,3 +1668,79 @@ async def test_change_booking_duration(client, db_session):
     # короче 15 минут нельзя
     r = await client.post(f"/bookings/{bid}/duration", json={"delta_minutes": -60}, headers=headers)
     assert r.status_code == 400
+
+
+async def test_update_booking_details(client, db_session):
+    import uuid as _uuid
+    from sqlalchemy import select
+    from app.models import Booking, Car, User
+
+    headers = await _manual_manager_headers(client, db_session, "+79165559940")
+    post = Post(name="Пост правка", work_start="09:00", work_end="18:00", work_days="1111111")
+    db_session.add(post)
+    await db_session.flush()
+    day = date.today() + timedelta(days=41)
+
+    # записали впопыхах: только марка и «что делаем», клиент без телефона и имени
+    r = await client.post(
+        "/bookings/manual",
+        json={"post_id": str(post.id), "date": str(day), "start_time": "10:00", "duration_minutes": 60,
+              "car_make": "Тойота", "services_text": "замена масла"},
+        headers=headers,
+    )
+    assert r.status_code == 200
+    bid = r.json()["id"]
+
+    async def booking_row():
+        return (
+            await db_session.execute(select(Booking).where(Booking.id == _uuid.UUID(bid)).execution_options(populate_existing=True))
+        ).scalar_one()
+
+    # дописываем имя, телефон, модель, VIN и комментарий; «что делаем» не присылаем — должно остаться
+    r = await client.patch(
+        f"/bookings/{bid}/details",
+        json={"client_name": "Иван", "phone": "+79165559941", "car_model": "Камри",
+              "vin": "jtnb11hk003123456", "comment": "Принесёт свой фильтр"},
+        headers=headers,
+    )
+    assert r.status_code == 200
+    b = await booking_row()
+    assert b.comment == "Принесёт свой фильтр"
+    assert b.services_text == "замена масла"
+    user = (await db_session.execute(select(User).where(User.phone == "+79165559941").execution_options(populate_existing=True))).scalar_one()
+    assert user.full_name == "Иван"
+    assert b.user_id == user.id
+    car = (await db_session.execute(select(Car).where(Car.id == b.car_id).execution_options(populate_existing=True))).scalar_one()
+    assert (car.make, car.model, car.vin) == ("Тойота", "Камри", "JTNB11HK003123456")
+
+    # несуществующая услуга
+    r = await client.patch(f"/bookings/{bid}/details", json={"service_ids": [str(_uuid.uuid4())]}, headers=headers)
+    assert r.status_code == 400
+
+    # телефон уже есть у другого клиента: запись переезжает к нему вместе с машиной
+    r2 = await client.post(
+        "/bookings/manual",
+        json={"post_id": str(post.id), "date": str(day), "start_time": "12:00", "duration_minutes": 60, "phone": "+79165559943"},
+        headers=headers,
+    )
+    assert r2.status_code == 200
+    other_id = _uuid.UUID(r2.json()["user_id"])
+    r = await client.patch(f"/bookings/{bid}/details", json={"phone": "+79165559943"}, headers=headers)
+    assert r.status_code == 200
+    b = await booking_row()
+    assert b.user_id == other_id
+    car = (await db_session.execute(select(Car).where(Car.id == b.car_id).execution_options(populate_existing=True))).scalar_one()
+    assert car.user_id == other_id and car.model == "Камри"
+
+    # зарегистрированному клиенту (есть почта) имя не меняем
+    reg = User(phone="+79165559944", email="reg@example.com", full_name="Мария", role="client")
+    db_session.add(reg)
+    await db_session.flush()
+    r3 = await client.post(
+        "/bookings/manual",
+        json={"post_id": str(post.id), "date": str(day), "start_time": "14:00", "duration_minutes": 60, "phone": "+79165559944"},
+        headers=headers,
+    )
+    assert r3.status_code == 200
+    r = await client.patch(f"/bookings/{r3.json()['id']}/details", json={"client_name": "Другая"}, headers=headers)
+    assert r.status_code == 409

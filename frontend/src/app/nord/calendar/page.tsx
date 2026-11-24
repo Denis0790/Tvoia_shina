@@ -1089,7 +1089,11 @@ function EditBookingModal({
   const [picked, setPicked] = useState<Service[]>(
     booking.services.map((s) => ({ id: s.id, name: s.name, duration_minutes: s.duration_minutes }))
   );
-  const [other, setOther] = useState(booking.services_text ?? "");
+  const [others, setOthers] = useState<string[]>(
+    (booking.services_text ?? "").split(/[,;\n]/).map((x) => x.trim()).filter(Boolean)
+  );
+  const [servicesText, setServicesText] = useState("");
+  const [svcFocus, setSvcFocus] = useState(false);
   const [comment, setComment] = useState(booking.comment ?? "");
   const [catalog, setCatalog] = useState<Service[]>([]);
   const [saving, setSaving] = useState(false);
@@ -1102,6 +1106,30 @@ function EditBookingModal({
   const inp =
     "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-blue";
   const lbl = "block text-xs text-gray-500 mt-3 mb-1";
+
+  // подсказки из справочника услуг: по тексту после последней запятой / точки с запятой / перевода строки
+  const svcFragment = (servicesText.split(/[,;\n]/).pop() ?? "").trim().toLowerCase();
+  const rawFragment = (servicesText.split(/[,;\n]/).pop() ?? "").trim();
+  const svcSuggestions = catalog
+    .filter((x) => !picked.some((p) => p.id === x.id) && svcFragment !== "" && x.name.toLowerCase().includes(svcFragment))
+    .slice(0, 4);
+  // в справочнике нет ничего похожего — предлагаем «Другое»
+  const showOther = svcFragment.length >= 2 && !catalog.some((x) => x.name.toLowerCase().includes(svcFragment));
+
+  function cutFragment() {
+    const cut = Math.max(servicesText.lastIndexOf(","), servicesText.lastIndexOf(";"), servicesText.lastIndexOf("\n"));
+    setServicesText(cut >= 0 ? servicesText.slice(0, cut).replace(/[\s,;]+$/, "") : "");
+  }
+  function pickService(x: Service) {
+    cutFragment();
+    setPicked([...picked, x]);
+  }
+  function pickOther() {
+    if (!rawFragment) return;
+    const text = rawFragment;
+    cutFragment();
+    setOthers((o) => (o.includes(text) ? o : [...o, text]));
+  }
 
   async function save() {
     const data: BookingDetailsInput = {};
@@ -1122,10 +1150,23 @@ function EditBookingModal({
     if (model.trim() !== (booking.car?.model ?? "")) data.car_model = model.trim();
     if (plate.trim().toUpperCase().replace(/\s/g, "") !== (booking.car?.plate ?? "")) data.car_plate = plate.trim();
     if (vin.trim().toUpperCase() !== (booking.car?.vin ?? "")) data.vin = vin.trim();
+    const leftovers = servicesText.split(/[,;\n]/).map((x) => x.trim()).filter(Boolean);
+    const allPicked = [...picked];
+    const unknown: string[] = [];
+    for (const part of leftovers) {
+      const hit = catalog.find((x) => x.name.trim().toLowerCase() === part.toLowerCase());
+      if (!hit) unknown.push(part);
+      else if (!allPicked.some((x) => x.id === hit.id)) allPicked.push(hit);
+    }
+    if (unknown.length > 0) {
+      setError(`Выберите подсказку или «Другое»: «${unknown.join("», «")}»`);
+      return;
+    }
     const before = booking.services.map((s) => s.id).sort().join(",");
-    const after = picked.map((s) => s.id).sort().join(",");
-    if (before !== after) data.service_ids = picked.map((s) => s.id);
-    if (other.trim() !== (booking.services_text ?? "")) data.services_text = other.trim();
+    const after = allPicked.map((s) => s.id).sort().join(",");
+    if (before !== after) data.service_ids = allPicked.map((s) => s.id);
+    const othersText = others.join(", ").slice(0, 500);
+    if (othersText !== (booking.services_text ?? "")) data.services_text = othersText;
     if (comment.trim() !== (booking.comment ?? "")) data.comment = comment.trim();
     if (Object.keys(data).length === 0) {
       onClose();
@@ -1183,46 +1224,92 @@ function EditBookingModal({
         </div>
 
         <p className="text-xs font-semibold text-gray-700 mt-5">Работы</p>
-        {picked.length > 0 && (
+        {(picked.length > 0 || others.length > 0) && (
           <div className="flex flex-wrap gap-1.5 mt-2">
-            {picked.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => setPicked(picked.filter((x) => x.id !== s.id))}
-                title="Убрать"
-                className="inline-flex items-center gap-1 bg-brand-blue/10 text-brand-blue-dark text-xs rounded-full pl-2.5 pr-2 py-1 cursor-pointer"
+            {picked.map((x) => (
+              <span
+                key={x.id}
+                className="inline-flex items-center gap-1.5 rounded-full bg-brand-blue/10 text-brand-blue-dark text-xs font-medium pl-2.5 pr-1.5 py-1"
               >
-                {s.name}
-                <span aria-hidden>×</span>
-              </button>
+                {x.name} · {formatDuration(x.duration_minutes)}
+                <button
+                  type="button"
+                  aria-label="Убрать услугу"
+                  onClick={() => setPicked(picked.filter((p) => p.id !== x.id))}
+                  className="w-4 h-4 rounded-full hover:bg-brand-blue/20 flex items-center justify-center cursor-pointer leading-none"
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+            {others.map((t) => (
+              <span
+                key={t}
+                className="inline-flex items-center gap-1.5 rounded-full bg-brand-yellow/30 text-brand-blue-dark text-xs font-medium pl-2.5 pr-1.5 py-1"
+              >
+                Другое: {t}
+                <button
+                  type="button"
+                  aria-label="Убрать"
+                  onClick={() => setOthers((o) => o.filter((v) => v !== t))}
+                  className="w-4 h-4 rounded-full hover:bg-brand-yellow/50 flex items-center justify-center cursor-pointer leading-none"
+                >
+                  ×
+                </button>
+              </span>
             ))}
           </div>
         )}
-        <select
-          value=""
-          onChange={(e) => {
-            const x = catalog.find((c) => c.id === e.target.value);
-            if (x) setPicked([...picked, x]);
-          }}
-          className={`${inp} mt-2`}
-        >
-          <option value="">Добавить услугу…</option>
-          {catalog
-            .filter((c) => !picked.some((p) => p.id === c.id))
-            .map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-        </select>
-        <input
-          value={other}
-          onChange={(e) => setOther(e.target.value)}
-          maxLength={500}
-          placeholder="Другое (своими словами)"
-          className={`${inp} mt-2`}
-        />
+        <div className="relative mt-2">
+          <textarea
+            value={servicesText}
+            maxLength={500}
+            onChange={(e) => setServicesText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && (svcSuggestions.length > 0 || showOther)) {
+                e.preventDefault();
+                if (svcSuggestions.length > 0) pickService(svcSuggestions[0]);
+                else pickOther();
+              }
+            }}
+            onFocus={() => setSvcFocus(true)}
+            onBlur={() => setTimeout(() => setSvcFocus(false), 150)}
+            placeholder="Начните вводить услугу и выберите из списка"
+            rows={2}
+            className={`${inp} resize-none`}
+          />
+          {svcFocus && (svcSuggestions.length > 0 || showOther) && (
+            <div className="absolute z-10 bottom-full left-0 right-0 mb-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+              {svcSuggestions.map((x) => (
+                <button
+                  key={x.id}
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    pickService(x);
+                  }}
+                  className="w-full text-left px-3 py-2 hover:bg-brand-blue/5 transition-colors cursor-pointer border-b border-gray-100 last:border-b-0 flex items-center justify-between gap-3"
+                >
+                  <span className="text-sm text-gray-900 truncate">{x.name}</span>
+                  <span className="text-xs text-gray-400 whitespace-nowrap">{formatDuration(x.duration_minutes)}</span>
+                </button>
+              ))}
+              {svcSuggestions.length === 0 && showOther && (
+                <button
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    pickOther();
+                  }}
+                  className="w-full text-left px-3 py-2 hover:bg-brand-yellow/20 transition-colors cursor-pointer flex items-center justify-between gap-3"
+                >
+                  <span className="text-sm text-gray-900 truncate">Другое: «{rawFragment}»</span>
+                  <span className="text-xs text-gray-400 whitespace-nowrap">нет в справочнике</span>
+                </button>
+              )}
+            </div>
+          )}
+        </div>
 
         <label className={lbl}>Комментарий к записи</label>
         <textarea
